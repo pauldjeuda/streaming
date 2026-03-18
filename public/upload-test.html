@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Test Upload Vidéo</title>
+</head>
+<body>
+  <h1>Upload vidéo</h1>
+
+  <form id="uploadForm">
+    <div>
+      <label>Caption :</label>
+      <input type="text" name="caption" />
+    </div>
+
+    <div>
+      <label>Vidéo :</label>
+      <input type="file" name="video" accept="video/*" required />
+    </div>
+
+    <button type="submit">Envoyer</button>
+  </form>
+
+  <pre id="result"></pre>
+
+  <script>
+    const form = document.getElementById("uploadForm");
+    const result = document.getElementById("result");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const formData = new FormData(form);
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+      result.textContent = JSON.stringify(data, null, 2);
+    });
+  </script>
+</body>
+</html>
