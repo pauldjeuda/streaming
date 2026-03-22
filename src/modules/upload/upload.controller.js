@@ -1,8 +1,15 @@
 const { createUploadedVideo } = require("./upload.service");
 const { processVideo } = require("../../workers/transcode.worker");
+const { assertRateLimit } = require("../../services/rate-limit.service");
 
 async function uploadVideo(req, res, next) {
   try {
+    assertRateLimit({
+      key: `upload:${req.ip}:${req.body.userId || 'creator-demo'}`,
+      limit: 5,
+      windowSeconds: 60 * 60,
+    });
+
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -10,14 +17,13 @@ async function uploadVideo(req, res, next) {
       });
     }
 
-    const { caption } = req.body;
+    const { caption, userId } = req.body;
 
     const video = await createUploadedVideo({
       file: req.file,
       caption,
+      userId,
     });
-
-    console.log("Vidéo créée en base :", video._id.toString());
 
     setImmediate(() => {
       processVideo(video._id).catch((error) => {
@@ -35,6 +41,11 @@ async function uploadVideo(req, res, next) {
         originalPath: video.originalPath,
         status: video.status,
         createdAt: video.createdAt,
+      },
+      constraints: {
+        maxDurationSeconds: 180,
+        maxBytes: 500 * 1024 * 1024,
+        targetAspectRatio: '9:16',
       },
     });
   } catch (error) {

@@ -11,11 +11,10 @@ if (!fs.existsSync(absoluteOriginalsDir)) {
 }
 
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
+  destination(req, file, cb) {
     cb(null, absoluteOriginalsDir);
   },
-
-  filename: function (req, file, cb) {
+  filename(req, file, cb) {
     const extension = path.extname(file.originalname).toLowerCase();
     const filename = `${uuidv4()}${extension}`;
     cb(null, filename);
@@ -25,9 +24,10 @@ const storage = multer.diskStorage({
 function fileFilter(req, file, cb) {
   const allowedMimeTypes = [
     "video/mp4",
-    "video/quicktime",   // .mov
-    "video/x-matroska",  // .mkv
+    "video/quicktime",
+    "video/x-matroska",
     "video/webm",
+    "video/x-msvideo",
     "video/avi",
   ];
 
@@ -42,7 +42,7 @@ const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 300 * 1024 * 1024, // 300 MB
+    fileSize: env.uploadMaxBytes,
   },
 });
 
