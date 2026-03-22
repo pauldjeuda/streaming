@@ -3,197 +3,57 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Feed vidéo test</title>
+  <title>Short streaming vertical</title>
   <style>
-    * {
-      box-sizing: border-box;
-    }
-
-    html, body {
-      margin: 0;
-      width: 100%;
-      height: 100%;
-      background: #000;
-      color: #fff;
-      font-family: Arial, sans-serif;
-      overflow: hidden;
-      touch-action: none;
-    }
-
-    .app {
-      width: 100vw;
-      height: 100vh;
-      position: relative;
-      background: #000;
-    }
-
-    .video-container {
-      width: 100%;
-      height: 100%;
-      position: relative;
-      background: #000;
-      overflow: hidden;
-      touch-action: none;
-    }
-
-    video {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      background: #000;
-      display: block;
-    }
-
-    .overlay {
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      padding: 20px;
-      background: linear-gradient(to top, rgba(0,0,0,0.78), rgba(0,0,0,0));
-      z-index: 3;
-    }
-
-    .caption {
-      font-size: 16px;
-      margin-bottom: 8px;
-    }
-
-    .meta {
-      font-size: 13px;
-      opacity: 0.85;
-    }
-
-    .controls {
-      position: absolute;
-      right: 16px;
-      bottom: 140px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      z-index: 3;
-    }
-
-    .controls button,
-    .topbar button {
-      border: none;
-      border-radius: 12px;
-      padding: 10px 12px;
-      background: rgba(255,255,255,0.18);
-      color: #fff;
-      cursor: pointer;
-    }
-
-    .topbar {
-      position: absolute;
-      top: 12px;
-      left: 12px;
-      right: 12px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      z-index: 4;
-    }
-
-    .status {
-      background: rgba(0,0,0,0.45);
-      padding: 10px 12px;
-      border-radius: 12px;
-      font-size: 12px;
-      max-width: 78%;
-    }
-
-    .hint {
-      position: absolute;
-      top: 64px;
-      left: 12px;
-      background: rgba(0,0,0,0.45);
-      padding: 8px 10px;
-      border-radius: 10px;
-      font-size: 12px;
-      z-index: 4;
-    }
-
-    .progress-wrap {
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      height: 4px;
-      background: rgba(255,255,255,0.12);
-      z-index: 5;
-    }
-
-    .progress-bar {
-      height: 100%;
-      width: 0%;
-      background: #fff;
-      transition: width 0.1s linear;
-    }
-
-    .buffering {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: rgba(0,0,0,0.6);
-      padding: 12px 16px;
-      border-radius: 12px;
-      font-size: 14px;
-      display: none;
-      z-index: 5;
-    }
-
-    .debug {
-      position: absolute;
-      left: 12px;
-      bottom: 110px;
-      background: rgba(0,0,0,0.45);
-      padding: 10px 12px;
-      border-radius: 12px;
-      font-size: 12px;
-      z-index: 4;
-      max-width: 72%;
-    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; height: 100%; background: #050505; color: #fff; font-family: Arial, sans-serif; overflow: hidden; }
+    .app, .video-container { width: 100vw; height: 100vh; position: relative; }
+    video { width: 100%; height: 100%; object-fit: cover; background: #000; }
+    .topbar, .side, .bottom, .panel { position: absolute; z-index: 4; }
+    .topbar { top: 12px; left: 12px; right: 12px; display: flex; gap: 12px; justify-content: space-between; }
+    .chip, button { background: rgba(10,10,10,.58); border: 1px solid rgba(255,255,255,.14); color: #fff; border-radius: 14px; padding: 10px 12px; }
+    button { cursor: pointer; }
+    .panel { top: 62px; left: 12px; max-width: min(92vw, 420px); display: grid; gap: 8px; }
+    .side { right: 12px; bottom: 140px; display: flex; flex-direction: column; gap: 8px; }
+    .bottom { left: 0; right: 0; bottom: 0; padding: 18px; background: linear-gradient(to top, rgba(0,0,0,.84), transparent); }
+    .caption { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+    .meta { opacity: .9; font-size: 13px; line-height: 1.45; }
+    .progress-wrap { margin-top: 12px; height: 4px; background: rgba(255,255,255,.15); border-radius: 999px; overflow: hidden; }
+    .progress-bar { height: 100%; width: 0; background: linear-gradient(90deg, #00d4ff, #7c5cff); }
+    .buffering { position: absolute; inset: 0; display: none; place-items: center; background: rgba(0,0,0,.26); z-index: 5; }
+    .buffering span { padding: 10px 14px; border-radius: 999px; background: rgba(0,0,0,.7); }
   </style>
 </head>
 <body>
   <div class="app">
     <div class="topbar">
-      <div class="status" id="status">Chargement du feed...</div>
+      <div class="chip" id="status">Chargement...</div>
       <div>
-        <button id="reloadBtn">Recharger</button>
+        <button id="reloadBtn">Reload</button>
       </div>
     </div>
 
-    <div class="hint">
-      Tap : pause / reprise<br />
-      Swipe haut/bas : changer de vidéo<br />
-      Espace : play/pause
+    <div class="panel">
+      <div class="chip" id="sessionInfo">Session</div>
+      <div class="chip" id="debug">Préchargement en attente...</div>
     </div>
 
     <div class="video-container" id="videoContainer">
-      <video id="video" playsinline muted></video>
+      <video id="video" playsinline muted autoplay></video>
+      <div class="buffering" id="buffering"><span>Chargement intelligent...</span></div>
 
-      <div class="buffering" id="buffering">Chargement...</div>
-
-      <div class="controls">
-        <button id="prevBtn">↑ Précédente</button>
+      <div class="side">
+        <button id="prevBtn">↑</button>
+        <button id="likeBtn">❤</button>
         <button id="toggleBtn">Pause</button>
-        <button id="muteBtn">Unmute</button>
-        <button id="nextBtn">↓ Suivante</button>
+        <button id="muteBtn">Son</button>
+        <button id="nextBtn">↓</button>
       </div>
 
-      <div class="debug" id="debug">Debug player...</div>
-
-      <div class="overlay">
+      <div class="bottom">
         <div class="caption" id="caption">...</div>
         <div class="meta" id="meta">...</div>
-      </div>
-
-      <div class="progress-wrap">
-        <div class="progress-bar" id="progressBar"></div>
+        <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
       </div>
     </div>
   </div>
@@ -201,404 +61,188 @@
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script>
     const video = document.getElementById("video");
-    const videoContainer = document.getElementById("videoContainer");
     const statusEl = document.getElementById("status");
+    const debugEl = document.getElementById("debug");
+    const sessionInfoEl = document.getElementById("sessionInfo");
     const captionEl = document.getElementById("caption");
     const metaEl = document.getElementById("meta");
-    const debugEl = document.getElementById("debug");
-    const bufferingEl = document.getElementById("buffering");
     const progressBar = document.getElementById("progressBar");
+    const bufferingEl = document.getElementById("buffering");
 
     const prevBtn = document.getElementById("prevBtn");
     const nextBtn = document.getElementById("nextBtn");
+    const likeBtn = document.getElementById("likeBtn");
     const toggleBtn = document.getElementById("toggleBtn");
     const muteBtn = document.getElementById("muteBtn");
     const reloadBtn = document.getElementById("reloadBtn");
 
     let hlsInstance = null;
-    let preloadHls = null;
-    let preloadVideo = null;
     let feed = [];
     let currentIndex = 0;
-    let sessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    let sessionId = localStorage.getItem("demo_session_id") || `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    let preloadCache = new Map();
+    let lastSentSecond = -1;
 
-    let touchStartY = 0;
-    let touchEndY = 0;
-    let lastProgressSentAt = 0;
-    const PROGRESS_INTERVAL_MS = 3000;
+    localStorage.setItem("demo_session_id", sessionId);
 
-    async function fetchFeed() {
-      const response = await fetch("/api/feed");
+    async function fetchFeed(offset = 0) {
+      const response = await fetch(`/api/v2/feed?session_id=${sessionId}&limit=20&offset=${offset}`);
       const result = await response.json();
-
-      if (!result.success) {
-        throw new Error(result.message || "Impossible de charger le feed");
-      }
-
+      if (!result.success) throw new Error(result.message || "Erreur feed");
+      sessionInfoEl.textContent = `Session ${result.session.sessionId.slice(0, 12)} • index ${result.session.feedState.index}`;
       return result.data || [];
     }
 
-    async function sendPlaybackEvent(videoId, eventType, extra = {}) {
-      try {
-        await fetch(`/api/playback/${videoId}/events`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            sessionId,
-            eventType,
-            position: Number(video.currentTime || 0),
-            watchTime: Number(video.currentTime || 0),
-            metadata: extra
-          })
-        });
-      } catch (error) {
-        console.error("Erreur event playback:", error);
-      }
+    async function preloadVideo(videoId) {
+      if (preloadCache.has(videoId)) return preloadCache.get(videoId);
+      const response = await fetch(`/api/videos/${videoId}/preload`);
+      const result = await response.json();
+      preloadCache.set(videoId, result.data);
+      return result.data;
     }
 
-    function updateDebug(text) {
-      debugEl.textContent = text;
-    }
-
-    function updateProgressBar() {
-      if (!video.duration || Number.isNaN(video.duration)) {
-        progressBar.style.width = "0%";
-        return;
-      }
-      const percent = Math.min((video.currentTime / video.duration) * 100, 100);
-      progressBar.style.width = `${percent}%`;
-    }
-
-    function showBuffering(show) {
-      bufferingEl.style.display = show ? "block" : "none";
-    }
-
-    function destroyHls() {
-      if (hlsInstance) {
-        hlsInstance.destroy();
-        hlsInstance = null;
-      }
-      video.removeAttribute("src");
-      video.load();
-    }
-
-    function destroyPreload() {
-      if (preloadHls) {
-        preloadHls.destroy();
-        preloadHls = null;
-      }
-      if (preloadVideo) {
-        preloadVideo.removeAttribute("src");
-        preloadVideo.load();
-        preloadVideo = null;
-      }
-    }
-
-    function canUseNativeHls() {
-      return video.canPlayType("application/vnd.apple.mpegurl");
-    }
-
-    function attachHlsToMainVideo(hlsUrl) {
-      if (canUseNativeHls()) {
-        video.src = hlsUrl;
-        return;
-      }
-
-      if (window.Hls && Hls.isSupported()) {
-        hlsInstance = new Hls({
-          enableWorker: true,
-          lowLatencyMode: false,
-        });
-        hlsInstance.loadSource(hlsUrl);
-        hlsInstance.attachMedia(video);
-        return;
-      }
-
-      throw new Error("HLS non supporté sur ce navigateur");
-    }
-
-    function preloadNextVideo(index) {
-      destroyPreload();
-
-      if (!feed.length) return;
-      if (index < 0 || index >= feed.length) return;
-
-      const nextItem = feed[index];
-      if (!nextItem || !nextItem.hlsUrl) return;
-
-      preloadVideo = document.createElement("video");
-      preloadVideo.muted = true;
-      preloadVideo.playsInline = true;
-      preloadVideo.preload = "auto";
-
-      if (canUseNativeHls()) {
-        preloadVideo.src = nextItem.hlsUrl;
-      } else if (window.Hls && Hls.isSupported()) {
-        preloadHls = new Hls({
-          enableWorker: true,
-          lowLatencyMode: false,
-        });
-        preloadHls.loadSource(nextItem.hlsUrl);
-        preloadHls.attachMedia(preloadVideo);
-      }
-
-      updateDebug(`Préchargement vidéo index ${index + 1}`);
-    }
-
-    async function loadVideoAt(index, direction = "direct") {
-      if (!feed.length) {
-        statusEl.textContent = "Aucune vidéo prête dans le feed";
-        return;
-      }
-
-      if (index < 0) index = 0;
-      if (index >= feed.length) index = feed.length - 1;
-
-      currentIndex = index;
-      const item = feed[currentIndex];
-
-      destroyHls();
-
-      captionEl.textContent = item.caption || "(sans légende)";
-      metaEl.textContent = `Vidéo ${currentIndex + 1}/${feed.length} • durée DB: ${item.duration ? item.duration.toFixed(2) + "s" : "?"}`;
-      statusEl.textContent = `Chargement vidéo ${currentIndex + 1}/${feed.length}`;
-      updateDebug(`Chargement item ${item.id}`);
-
-      if (!item.hlsUrl) {
-        statusEl.textContent = "Cette vidéo n'a pas d'URL HLS";
-        return;
-      }
-
-      if (item.thumbnailUrl) {
-        video.poster = item.thumbnailUrl;
-      }
-
-      attachHlsToMainVideo(item.hlsUrl);
-
-      await sendPlaybackEvent(item.id, "impression", {
-        index: currentIndex,
-        direction
+    async function refreshSignedUrl(videoId) {
+      const response = await fetch(`/api/videos/${videoId}/refresh_token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId })
       });
-
-      try {
-        await video.play();
-        toggleBtn.textContent = "Pause";
-        statusEl.textContent = `Lecture vidéo ${currentIndex + 1}/${feed.length}`;
-      } catch (error) {
-        console.error("Lecture auto refusée:", error);
-        statusEl.textContent = "Autoplay bloqué. Lance la lecture manuellement.";
-      }
-
-      const nextIndex = currentIndex + 1 >= feed.length ? 0 : currentIndex + 1;
-      preloadNextVideo(nextIndex);
+      return response.json();
     }
 
-    async function initFeed() {
-      statusEl.textContent = "Chargement du feed...";
-      feed = await fetchFeed();
-
-      if (!feed.length) {
-        statusEl.textContent = "Aucune vidéo ready dans le feed";
-        captionEl.textContent = "Upload et traite au moins une vidéo";
-        metaEl.textContent = "";
-        updateDebug("Feed vide");
-        return;
-      }
-
-      await loadVideoAt(0);
+    async function sendPlaybackEvent(videoId, eventType, extra = {}) {
+      await fetch(`/api/playback/${videoId}/events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, eventType, position: video.currentTime || 0, watchTime: video.currentTime || 0, metadata: extra })
+      });
     }
 
-    function togglePlayback() {
-      if (video.paused) {
-        video.play();
+    async function registerView(videoId) {
+      await fetch(`/api/video/${videoId}/view`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, watchTime: video.currentTime || 0 })
+      });
+    }
+
+    async function likeCurrentVideo() {
+      const current = feed[currentIndex];
+      if (!current) return;
+      await fetch(`/api/video/${current.id}/like`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId })
+      });
+      statusEl.textContent = `Like envoyé sur ${current.id}`;
+    }
+
+    function mountSource(url) {
+      if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = url;
+      } else if (window.Hls && Hls.isSupported()) {
+        hlsInstance = new Hls({ maxBufferLength: 8, backBufferLength: 4 });
+        hlsInstance.loadSource(url);
+        hlsInstance.attachMedia(video);
       } else {
-        video.pause();
+        throw new Error('HLS non supporté');
       }
     }
 
-    function toggleMute() {
-      video.muted = !video.muted;
-      muteBtn.textContent = video.muted ? "Unmute" : "Mute";
+    async function playVideo(index) {
+      if (index < 0 || index >= feed.length) return;
+      currentIndex = index;
+      const current = feed[currentIndex];
+      statusEl.textContent = `Lecture ${currentIndex + 1}/${feed.length} • ${current.targetAspectRatio}`;
+      captionEl.textContent = current.caption || 'Sans légende';
+      metaEl.textContent = `Durée ${Number(current.duration || 0).toFixed(1)}s • ${current.width}x${current.height} • vues ${current.stats.views} • likes ${current.stats.likes}`;
+      debugEl.textContent = `ABR: ${current.variants.map(v => `${v.name}:${v.resolution}`).join(' | ')}`;
+      mountSource(current.signedPlayback || current.hlsUrl);
+      await video.play().catch(() => {});
+      await sendPlaybackEvent(current.id, 'play');
+      await preloadNeighbours();
+      if (currentIndex >= feed.length - 3) {
+        const more = await fetchFeed(feed.length);
+        feed = feed.concat(more);
+      }
     }
 
-    async function goNext() {
-      if (!feed.length) return;
-      const current = feed[currentIndex];
-      if (current) {
-        await sendPlaybackEvent(current.id, "swipe_next", { fromIndex: currentIndex });
-      }
-      const nextIndex = currentIndex + 1 >= feed.length ? 0 : currentIndex + 1;
-      await loadVideoAt(nextIndex, "next");
+    async function preloadNeighbours() {
+      const targets = feed.slice(currentIndex + 1, currentIndex + 3);
+      const details = await Promise.all(targets.map((item) => preloadVideo(item.id)));
+      debugEl.textContent = `Préchargées: ${details.map(detail => detail?.id).filter(Boolean).join(', ') || 'aucune'}`;
     }
 
-    async function goPrev() {
-      if (!feed.length) return;
-      const current = feed[currentIndex];
-      if (current) {
-        await sendPlaybackEvent(current.id, "swipe_prev", { fromIndex: currentIndex });
-      }
-      const prevIndex = currentIndex - 1 < 0 ? feed.length - 1 : currentIndex - 1;
-      await loadVideoAt(prevIndex, "prev");
+    async function bootstrap() {
+      bufferingEl.style.display = 'grid';
+      feed = await fetchFeed(0);
+      bufferingEl.style.display = 'none';
+      await playVideo(0);
     }
 
-    function handleTapOrClick() {
-      togglePlayback();
-    }
-
-    videoContainer.addEventListener("click", (e) => {
-  const clickedButton = e.target.closest("button");
-  if (clickedButton) return;
-
-  togglePlayback();
-});
-
-let pointerStartY = null;
-let pointerStartX = null;
-let pointerStartTime = 0;
-
-videoContainer.addEventListener("pointerdown", (e) => {
-  pointerStartY = e.clientY;
-  pointerStartX = e.clientX;
-  pointerStartTime = Date.now();
-});
-
-videoContainer.addEventListener("pointerup", async (e) => {
-  if (pointerStartY === null || pointerStartX === null) return;
-
-  const deltaY = pointerStartY - e.clientY;
-  const deltaX = pointerStartX - e.clientX;
-  const duration = Date.now() - pointerStartTime;
-
-  const absDeltaY = Math.abs(deltaY);
-  const absDeltaX = Math.abs(deltaX);
-
-  pointerStartY = null;
-  pointerStartX = null;
-  pointerStartTime = 0;
-
-  // Petit mouvement rapide = tap, mais le click du container gère déjà ça
-  // Donc ici on ne traite que les vrais swipes verticaux
-  const isVerticalSwipe = absDeltaY > 70 && absDeltaY > absDeltaX;
-  const isReasonableDuration = duration < 700;
-
-  if (!isVerticalSwipe || !isReasonableDuration) return;
-
-  if (deltaY > 0) {
-    await goNext();
-  } else {
-    await goPrev();
-  }
-});
-
-    video.addEventListener("play", async () => {
-      toggleBtn.textContent = "Pause";
+    prevBtn.onclick = () => playVideo(currentIndex - 1);
+    nextBtn.onclick = async () => {
       const current = feed[currentIndex];
-      if (current) {
-        await sendPlaybackEvent(current.id, "play");
-      }
-    });
+      if (current) await sendPlaybackEvent(current.id, 'skip');
+      playVideo(currentIndex + 1);
+    };
+    likeBtn.onclick = likeCurrentVideo;
+    toggleBtn.onclick = () => video.paused ? video.play() : video.pause();
+    muteBtn.onclick = () => { video.muted = !video.muted; muteBtn.textContent = video.muted ? 'Son' : 'Mute'; };
+    reloadBtn.onclick = bootstrap;
 
-    video.addEventListener("pause", async () => {
-      toggleBtn.textContent = "Play";
+    video.addEventListener('timeupdate', async () => {
+      const progress = video.duration ? (video.currentTime / video.duration) * 100 : 0;
+      progressBar.style.width = `${Math.min(progress, 100)}%`;
       const current = feed[currentIndex];
-      if (current) {
-        await sendPlaybackEvent(current.id, "pause");
-      }
-    });
-
-    video.addEventListener("ended", async () => {
-      const current = feed[currentIndex];
-      if (current) {
-        await sendPlaybackEvent(current.id, "complete");
-      }
-      await goNext();
-    });
-
-    video.addEventListener("timeupdate", async () => {
-      updateProgressBar();
-
-      const now = Date.now();
-      if (now - lastProgressSentAt < PROGRESS_INTERVAL_MS) return;
-
-      lastProgressSentAt = now;
-      const current = feed[currentIndex];
-      if (current) {
-        await sendPlaybackEvent(current.id, "progress", {
-          duration: video.duration || 0,
-          currentIndex
+      if (!current) return;
+      const second = Math.floor(video.currentTime || 0);
+      if (second !== lastSentSecond && second > 0) {
+        lastSentSecond = second;
+        await fetch(`/api/sessions/${sessionId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ feedState: { index: currentIndex, currentVideoId: current.id, progress: video.currentTime }, videoId: current.id })
         });
       }
-    });
-
-    video.addEventListener("waiting", () => {
-      showBuffering(true);
-      updateDebug("Buffering...");
-    });
-
-    video.addEventListener("playing", () => {
-      showBuffering(false);
-      updateDebug(`Playing | t=${(video.currentTime || 0).toFixed(2)}s`);
-    });
-
-    video.addEventListener("loadedmetadata", () => {
-      updateDebug(`Metadata OK | durée réelle=${(video.duration || 0).toFixed(2)}s`);
-    });
-
-    video.addEventListener("error", () => {
-      const mediaError = video.error;
-      updateDebug(`Erreur vidéo: ${mediaError ? mediaError.message || mediaError.code : "unknown"}`);
-    });
-
-toggleBtn.addEventListener("click", (e) => {
-  stopEvent(e);
-  togglePlayback();
-});
-
-muteBtn.addEventListener("click", (e) => {
-  stopEvent(e);
-  toggleMute();
-});
-
-nextBtn.addEventListener("click", async (e) => {
-  stopEvent(e);
-  await goNext();
-});
-
-prevBtn.addEventListener("click", async (e) => {
-  stopEvent(e);
-  await goPrev();
-});
-
-reloadBtn.addEventListener("click", async (e) => {
-  stopEvent(e);
-  await initFeed();
-});
-
-    window.addEventListener("keydown", async (e) => {
-      if (e.key === "ArrowDown") {
-        await goNext();
-      } else if (e.key === "ArrowUp") {
-        await goPrev();
-      } else if (e.key === " ") {
-        e.preventDefault();
-        togglePlayback();
-      } else if (e.key.toLowerCase() === "m") {
-        toggleMute();
+      if (current.tokenExpiresAt && Date.now() / 1000 > current.tokenExpiresAt - 30) {
+        const refreshed = await refreshSignedUrl(current.id);
+        current.signedPlayback = `${current.hlsUrl}?token=${refreshed.data.token}`;
+        current.tokenExpiresAt = refreshed.data.expiresAt;
       }
     });
 
-    initFeed().catch((error) => {
-      console.error(error);
-      statusEl.textContent = error.message || "Erreur de chargement du feed";
-      updateDebug(error.message || "Erreur");
+    video.addEventListener('waiting', () => bufferingEl.style.display = 'grid');
+    video.addEventListener('playing', () => bufferingEl.style.display = 'none');
+    video.addEventListener('pause', () => sendPlaybackEvent(feed[currentIndex]?.id, 'pause').catch(() => {}));
+    video.addEventListener('ended', async () => {
+      const current = feed[currentIndex];
+      if (current) {
+        await sendPlaybackEvent(current.id, 'ended');
+        await registerView(current.id);
+      }
+      playVideo(currentIndex + 1);
     });
 
-    function stopEvent(e) {
-  e.preventDefault();
-  e.stopPropagation();
-}
+    let touchStartY = 0;
+    window.addEventListener('touchstart', (event) => { touchStartY = event.changedTouches[0].screenY; }, { passive: true });
+    window.addEventListener('touchend', (event) => {
+      const delta = touchStartY - event.changedTouches[0].screenY;
+      if (delta > 70) nextBtn.click();
+      if (delta < -70) prevBtn.click();
+    }, { passive: true });
+    window.addEventListener('keydown', (event) => {
+      if (event.code === 'ArrowUp') prevBtn.click();
+      if (event.code === 'ArrowDown') nextBtn.click();
+      if (event.code === 'Space') { event.preventDefault(); toggleBtn.click(); }
+    });
+
+    bootstrap().catch((error) => {
+      bufferingEl.style.display = 'none';
+      statusEl.textContent = error.message;
+      console.error(error);
+    });
   </script>
 </body>
 </html>

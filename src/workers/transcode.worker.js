@@ -6,92 +6,73 @@ const { getVideoMetadata } = require("../lib/ffprobe");
 const { generateThumbnail } = require("../lib/thumbnail");
 const { generateHls, createMasterPlaylist } = require("../lib/hls");
 
-async function processVideo(videoId) {
-  console.log("processVideo appelé avec :", videoId.toString());
+function buildStoragePrefix(videoId) {
+  const date = new Date().toISOString().slice(0, 10);
+  return `${env.mediaDir}/${date}/${videoId}`;
+}
 
+async function processVideo(videoId) {
   const video = await Video.findById(videoId);
 
   if (!video) {
     throw new Error("Vidéo introuvable");
   }
 
-  console.log("Vidéo trouvée :", video._id.toString());
-
   const originalAbsolutePath = path.join(process.cwd(), video.originalPath);
-  const mediaRootRelative = `${env.mediaDir}/${video._id}`;
+  const mediaRootRelative = buildStoragePrefix(video._id);
   const mediaRootAbsolute = path.join(process.cwd(), mediaRootRelative);
-
-  console.log("Chemin vidéo source :", originalAbsolutePath);
-  console.log("Dossier média :", mediaRootAbsolute);
 
   try {
     video.status = "processing";
     video.errorMessage = null;
     await video.save();
 
-    console.log("Statut passé à processing");
+    fs.mkdirSync(mediaRootAbsolute, { recursive: true });
 
-    if (!fs.existsSync(mediaRootAbsolute)) {
-      fs.mkdirSync(mediaRootAbsolute, { recursive: true });
-    }
-
-    console.log("Lecture métadonnées...");
     const meta = await getVideoMetadata(originalAbsolutePath);
-    console.log("Métadonnées OK :", meta);
+    const thumbAbsolutePath = await generateThumbnail(originalAbsolutePath, mediaRootAbsolute);
+    const hlsResults = await generateHls(originalAbsolutePath, mediaRootAbsolute);
 
-    console.log("Génération miniature...");
-    const thumbAbsolutePath = await generateThumbnail(
-      originalAbsolutePath,
-      mediaRootAbsolute
-    );
-    console.log("Miniature OK :", thumbAbsolutePath);
+    const variants = hlsResults.map(({ rendition, playlistPath, segments }) => ({
+      name: rendition.name,
+      bandwidth: rendition.bandwidth,
+      resolution: `${rendition.width}x${rendition.height}`,
+      playlistPath: path.relative(process.cwd(), playlistPath).replace(/\\/g, "/"),
+      preloadSegments: segments.slice(0, 2),
+    }));
 
-    console.log("Génération HLS...");
-    const hlsResult = await generateHls(originalAbsolutePath, mediaRootAbsolute);
-    console.log("HLS OK :", hlsResult);
-
-    console.log("Création master playlist...");
-    const masterAbsolutePath = createMasterPlaylist(mediaRootAbsolute);
-    console.log("Master playlist OK :", masterAbsolutePath);
-
-    const thumbnailRelative = path
-      .relative(process.cwd(), thumbAbsolutePath)
-      .replace(/\\/g, "/");
-
-    const hlsMasterRelative = path
-      .relative(process.cwd(), masterAbsolutePath)
-      .replace(/\\/g, "/");
-
-    const playlistRelative = path
-      .relative(process.cwd(), hlsResult.playlistPath)
-      .replace(/\\/g, "/");
+    const masterAbsolutePath = createMasterPlaylist(mediaRootAbsolute, variants);
 
     video.mediaRootPath = mediaRootRelative.replace(/\\/g, "/");
-    video.hlsMasterPath = hlsMasterRelative;
-    video.thumbnailPath = thumbnailRelative;
+    video.storageKey = `${new Date().toISOString().slice(0, 10)}/${video._id}/master.m3u8`;
+    video.hlsMasterPath = path.relative(process.cwd(), masterAbsolutePath).replace(/\\/g, "/");
+    video.thumbnailPath = path.relative(process.cwd(), thumbAbsolutePath).replace(/\\/g, "/");
     video.duration = meta.duration;
     video.width = meta.width;
     video.height = meta.height;
     video.aspectRatio = meta.aspectRatio;
-    video.variants = [
-      {
-        name: "720p",
-        bandwidth: 1400000,
-        resolution: "720x1280",
-        playlistPath: playlistRelative,
-      },
-    ];
+    video.variants = variants;
+    video.segmentDuration = 2;
+    video.targetAspectRatio = "9:16";
+    video.ranking = {
+      viralScore: (video.stats.views + 1) / (video.stats.likes + 1),
+      freshnessScore: 1,
+      recommendationScore: 0.5,
+    };
     video.status = "ready";
 
     await video.save();
 
-    console.log("Processing terminé pour la vidéo", video._id.toString());
+    if (fs.existsSync(originalAbsolutePath)) {
+      fs.unlinkSync(originalAbsolutePath);
+      video.originalPath = null;
+      await video.save();
+    }
   } catch (error) {
     video.status = "failed";
     video.errorMessage = error.message;
     await video.save();
-
-    console.error("Erreur processing vidéo :", error);
+    throw error;
   }
 }
 
