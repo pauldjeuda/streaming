@@ -3,9 +3,9 @@ const path = require("path");
 const { ffmpeg } = require("./ffmpeg");
 
 const RENDITIONS = [
-  { name: "low", width: 480, height: 854, bandwidth: 800000 },
-  { name: "medium", width: 720, height: 1280, bandwidth: 2000000 },
-  { name: "high", width: 1080, height: 1920, bandwidth: 4000000 },
+  { name: "low", width: 426, height: 760, bandwidth: 600000 },    // 240p vertical - PLUS RAPIDE
+  { name: "medium", width: 640, height: 1140, bandwidth: 1200000 }, // 360p vertical
+  { name: "high", width: 720, height: 1280, bandwidth: 2500000 },   // 480p vertical - LIMITÉ
 ];
 
 function generateVariant(inputPath, outputDir, rendition) {
@@ -20,21 +20,23 @@ function generateVariant(inputPath, outputDir, rendition) {
     ffmpeg(inputPath)
       .videoFilters(`scale=${rendition.width}:${rendition.height}:force_original_aspect_ratio=decrease,pad=${rendition.width}:${rendition.height}:(ow-iw)/2:(oh-ih)/2:black`)
       .outputOptions([
-        "-preset veryfast",
-        "-g 48",
+        "-preset ultrafast",        // ULTRA RAPIDE
+        "-g 24",                   // Keyframes plus fréquents
         "-sc_threshold 0",
         "-map 0:v:0",
         "-map 0:a:0?",
         "-c:v libx264",
         "-c:a aac",
         `-b:v ${Math.round(rendition.bandwidth / 1000)}k`,
-        "-b:a 128k",
+        "-b:a 96k",                // Audio bitrate réduit pour vitesse
         "-ac 2",
-        "-ar 48000",
+        "-ar 44100",               // Audio sample rate réduit
         "-f hls",
         "-hls_time 2",
         "-hls_playlist_type vod",
         `-hls_segment_filename ${segmentPath}`,
+        "-tune fastdecode",        // Optimisé pour décodage rapide
+        "-movflags +faststart",    // Optimisé pour streaming
       ])
       .output(playlistPath)
       .on("end", () => {

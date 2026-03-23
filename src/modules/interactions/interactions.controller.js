@@ -15,13 +15,28 @@ async function likeVideo(req, res, next) {
       return res.status(404).json({ success: false, message: "Vidéo introuvable" });
     }
 
-    video.stats.likes += 1;
-    await video.save();
+    // Vérifier si l'utilisateur a déjà liké cette vidéo
+    const dedupeKey = `like:${sessionId}:${id}`;
+    const hasLiked = cache.get(dedupeKey);
 
-    incrementCounter("video_likes_total", 1, { video_id: id });
-    trackCreatorStat(video, 'like');
-
-    return res.json({ success: true, data: { id, likes: video.stats.likes } });
+    if (hasLiked) {
+      // Retirer le like
+      video.stats.likes = Math.max(0, video.stats.likes - 1);
+      cache.del(dedupeKey);
+      incrementCounter("video_unlikes_total", 1, { video_id: id });
+      await video.save();
+      
+      return res.json({ success: true, data: { id, likes: video.stats.likes, liked: false } });
+    } else {
+      // Ajouter le like
+      video.stats.likes += 1;
+      cache.set(dedupeKey, true, 24 * 60 * 60); // Garder en mémoire pendant 24h
+      incrementCounter("video_likes_total", 1, { video_id: id });
+      trackCreatorStat(video, 'like');
+      await video.save();
+      
+      return res.json({ success: true, data: { id, likes: video.stats.likes, liked: true } });
+    }
   } catch (error) {
     next(error);
   }

@@ -36,7 +36,11 @@ async function getReadyFeed({ limit = env.feedPageSize, offset = 0 } = {}) {
     return cached;
   }
 
-  const videos = await Video.find({ status: "ready" }).sort({ createdAt: -1 }).skip(offset).limit(limit);
+  // MODIFIÉ: Montrer TOUTES les vidéos (ready + processing) pour voir toutes les vidéos uploadées
+  const videos = await Video.find({ 
+    status: { $in: ["ready", "processing"] } 
+  }).sort({ createdAt: -1 }).skip(offset).limit(limit);
+  
   const ranked = rankVideos(videos);
   cache.set(cacheKey, ranked, 10);
   return ranked;

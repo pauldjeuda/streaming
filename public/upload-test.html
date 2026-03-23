@@ -3,43 +3,203 @@
 <head>
   <meta charset="UTF-8" />
   <title>Test Upload Vidéo</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+    .form-group { margin: 15px 0; }
+    label { display: block; margin-bottom: 5px; font-weight: bold; }
+    input[type="text"] { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+    input[type="file"] { width: 100%; padding: 8px; }
+    button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+    .result { margin-top: 20px; padding: 15px; border-radius: 4px; white-space: pre-wrap; font-family: monospace; font-size: 12px; max-height: 400px; overflow-y: auto; }
+    .result.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .result.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    .result.info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+    .status-monitor { margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 4px; }
+    .feed-link { display: inline-block; margin-top: 20px; padding: 10px 20px; background: #28a745; color: white; text-decoration: none; border-radius: 4px; }
+  </style>
 </head>
 <body>
-  <h1>Upload vidéo</h1>
+  <h1> Upload Vidéo</h1>
 
   <form id="uploadForm">
-    <div>
-      <label>Caption :</label>
-      <input type="text" name="caption" />
+    <div class="form-group">
+      <label for="caption">Caption (optionnel) :</label>
+      <input type="text" id="caption" name="caption" placeholder="Décrivez votre vidéo...">
     </div>
 
-    <div>
-      <label>Vidéo :</label>
-      <input type="file" name="video" accept="video/*" required />
+    <div class="form-group">
+      <label for="video">Vidéo :</label>
+      <input type="file" id="video" name="video" accept="video/*" required />
     </div>
 
-    <button type="submit">Envoyer</button>
+    
+
+    <button type="submit" id="uploadBtn"> Upload Vidéo</button>
   </form>
 
-  <pre id="result"></pre>
+  <div class="result" id="result" style="display: none;"></div>
+
+  <div class="status-monitor" id="statusMonitor" style="display: none;">
+    <h3> Suivi du traitement</h3>
+    <div id="statusInfo">En attente de l'upload...</div>
+    <button id="checkStatusBtn" onclick="checkVideoStatus()"> Vérifier le statut</button>
+    <button id="stopMonitoringBtn" onclick="stopMonitoring()"> Arrêter le suivi</button>
+  </div>
+
+  <a href="/feed.html" class="feed-link">Voir le feed</a>
 
   <script>
     const form = document.getElementById("uploadForm");
     const result = document.getElementById("result");
+    const uploadBtn = document.getElementById("uploadBtn");
+    const statusMonitor = document.getElementById("statusMonitor");
+    const statusInfo = document.getElementById("statusInfo");
+    const checkStatusBtn = document.getElementById("checkStatusBtn");
+    const stopMonitoringBtn = document.getElementById("stopMonitoringBtn");
+
+    let currentVideoId = null;
+    let monitoringInterval = null;
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
 
       const formData = new FormData(form);
+      const file = document.getElementById("video").files[0];
+      
+      if (!file) {
+        showResult(" Veuillez sélectionner une vidéo", "error");
+        return;
+      }
 
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
+      // Validation basique
+      if (file.size > 500 * 1024 * 1024) {
+        showResult(" La vidéo ne doit pas dépasser 500MB", "error");
+        return;
+      }
 
-      const data = await response.json();
-      result.textContent = JSON.stringify(data, null, 2);
+      // Désactiver le bouton et montrer le statut
+      uploadBtn.disabled = true;
+      uploadBtn.textContent = " Upload en cours...";
+      showResult(" Upload en cours...", "info");
+      statusMonitor.style.display = "block";
+      statusInfo.textContent = " Upload en cours...";
+
+      try {
+        console.log(" Début de l'upload...");
+        
+        const response = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await response.json();
+        
+        console.log("📩 Réponse du serveur:", data);
+
+        if (response.ok && data.success) {
+          currentVideoId = data.data.id;
+          showResult(`✅ Upload réussi!\n\n${JSON.stringify(data, null, 2)}`, "success");
+          statusInfo.textContent = `✅ Upload terminé! ID: ${currentVideoId}\n⏳ Démarrage du transcodage...`;
+          
+          // Démarrer le monitoring du statut
+          startStatusMonitoring();
+        } else {
+          showResult(`❌ Erreur: ${data.message}`, "error");
+          statusInfo.textContent = `❌ Erreur: ${data.message}`;
+        }
+      } catch (error) {
+        console.error("❌ Erreur upload:", error);
+        showResult(`❌ Erreur de connexion: ${error.message}`, "error");
+        statusInfo.textContent = `❌ Erreur: ${error.message}`;
+      } finally {
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = "🚀 Upload Vidéo";
+      }
     });
+
+    function showResult(message, type) {
+      result.textContent = message;
+      result.className = `result ${type}`;
+      result.style.display = "block";
+    }
+
+    function startStatusMonitoring() {
+      if (monitoringInterval) {
+        clearInterval(monitoringInterval);
+      }
+      
+      console.log(`🔍 Démarrage du monitoring pour la vidéo ${currentVideoId}`);
+      
+      monitoringInterval = setInterval(async () => {
+        await checkVideoStatus(false); // false = ne pas afficher de message d'erreur
+      }, 3000); // Vérifier toutes les 3 secondes
+    }
+
+    async function checkVideoStatus(showError = true) {
+      if (!currentVideoId) {
+        if (showError) showResult("❌ Aucune vidéo à vérifier", "error");
+        return;
+      }
+
+      try {
+        // Utiliser l'endpoint feed pour vérifier le statut
+        const response = await fetch("/api/feed");
+        const data = await response.json();
+        
+        if (data.success && data.data) {
+          const video = data.data.find(v => v.id === currentVideoId);
+          
+          if (video) {
+            console.log(`📊 Statut: ${video.status}`);
+            
+            if (video.status === 'ready') {
+              clearInterval(monitoringInterval);
+              statusInfo.textContent = `🎉 Vidéo prête!\n✅ Transcodage terminé\n📹 Durée: ${video.duration}s\n🎬 Qualités: ${video.variants?.length || 0}`;
+              showResult(`🎉 Vidéo prête!\n\n${JSON.stringify(video, null, 2)}`, "success");
+            } else if (video.status === 'failed') {
+              clearInterval(monitoringInterval);
+              statusInfo.textContent = `❌ Échec du traitement\nErreur: ${video.errorMessage || 'Inconnue'}`;
+              showResult(`❌ Échec du traitement\n\nErreur: ${video.errorMessage || 'Inconnue'}\n\n${JSON.stringify(video, null, 2)}`, "error");
+            } else if (video.status === 'processing') {
+              const elapsed = Math.floor((Date.now() - new Date(video.createdAt).getTime()) / 1000);
+              statusInfo.textContent = `⏳ Traitement en cours...\n⏱️ Temps écoulé: ${elapsed}s\n🔄 Vérification automatique toutes les 3s`;
+            } else if (video.status === 'uploaded') {
+              statusInfo.textContent = `📤 Uploadé, en attente du transcodage...\n⏳ Le traitement devrait commencer prochainement`;
+            }
+          } else {
+            if (showError) {
+              statusInfo.textContent = `❌ Vidéo non trouvée dans le feed`;
+              showResult("❌ Vidéo non trouvée dans le feed", "error");
+            }
+          }
+        } else {
+          if (showError) {
+            showResult(`❌ Erreur: ${data.message || 'Impossible de récupérer le feed'}`, "error");
+          }
+        }
+      } catch (error) {
+        if (showError) {
+          console.error("❌ Erreur vérification statut:", error);
+          statusInfo.textContent = `❌ Erreur de vérification: ${error.message}`;
+        }
+      }
+    }
+
+    function stopMonitoring() {
+      if (monitoringInterval) {
+        clearInterval(monitoringInterval);
+        monitoringInterval = null;
+        statusInfo.textContent = "⏹️ Suivi arrêté";
+      }
+    }
+
+    // Vérifier le statut toutes les 5 secondes même sans monitoring actif
+    setInterval(() => {
+      if (currentVideoId && !monitoringInterval) {
+        checkVideoStatus(false);
+      }
+    }, 5000);
   </script>
 </body>
 </html>
