@@ -95,26 +95,26 @@
 
         const data = await response.json();
         
-        console.log("📩 Réponse du serveur:", data);
+        console.log(" Réponse du serveur:", data);
 
         if (response.ok && data.success) {
           currentVideoId = data.data.id;
-          showResult(`✅ Upload réussi!\n\n${JSON.stringify(data, null, 2)}`, "success");
-          statusInfo.textContent = `✅ Upload terminé! ID: ${currentVideoId}\n⏳ Démarrage du transcodage...`;
+          showResult(` Upload réussi!\n\n${JSON.stringify(data, null, 2)}`, "success");
+          statusInfo.textContent = ` Upload terminé! ID: ${currentVideoId}\n Démarrage du transcodage...`;
           
           // Démarrer le monitoring du statut
           startStatusMonitoring();
         } else {
-          showResult(`❌ Erreur: ${data.message}`, "error");
-          statusInfo.textContent = `❌ Erreur: ${data.message}`;
+          showResult(` Erreur: ${data.message}`, "error");
+          statusInfo.textContent = ` Erreur: ${data.message}`;
         }
       } catch (error) {
-        console.error("❌ Erreur upload:", error);
-        showResult(`❌ Erreur de connexion: ${error.message}`, "error");
-        statusInfo.textContent = `❌ Erreur: ${error.message}`;
+        console.error(" Erreur upload:", error);
+        showResult(` Erreur de connexion: ${error.message}`, "error");
+        statusInfo.textContent = ` Erreur: ${error.message}`;
       } finally {
         uploadBtn.disabled = false;
-        uploadBtn.textContent = "🚀 Upload Vidéo";
+        uploadBtn.textContent = " Upload Vidéo";
       }
     });
 
@@ -138,7 +138,7 @@
 
     async function checkVideoStatus(showError = true) {
       if (!currentVideoId) {
-        if (showError) showResult("❌ Aucune vidéo à vérifier", "error");
+        if (showError) showResult(" Aucune vidéo à vérifier", "error");
         return;
       }
 
@@ -151,37 +151,37 @@
           const video = data.data.find(v => v.id === currentVideoId);
           
           if (video) {
-            console.log(`📊 Statut: ${video.status}`);
+            console.log(` Statut: ${video.status}`);
             
             if (video.status === 'ready') {
               clearInterval(monitoringInterval);
-              statusInfo.textContent = `🎉 Vidéo prête!\n✅ Transcodage terminé\n📹 Durée: ${video.duration}s\n🎬 Qualités: ${video.variants?.length || 0}`;
-              showResult(`🎉 Vidéo prête!\n\n${JSON.stringify(video, null, 2)}`, "success");
+              statusInfo.textContent = ` Vidéo prête!\n Transcodage terminé\n Durée: ${video.duration}s\n Qualités: ${video.variants?.length || 0}`;
+              showResult(`Vidéo prête!\n\n${JSON.stringify(video, null, 2)}`, "success");
             } else if (video.status === 'failed') {
               clearInterval(monitoringInterval);
-              statusInfo.textContent = `❌ Échec du traitement\nErreur: ${video.errorMessage || 'Inconnue'}`;
-              showResult(`❌ Échec du traitement\n\nErreur: ${video.errorMessage || 'Inconnue'}\n\n${JSON.stringify(video, null, 2)}`, "error");
+              statusInfo.textContent = ` Échec du traitement\nErreur: ${video.errorMessage || 'Inconnue'}`;
+              showResult(` Échec du traitement\n\nErreur: ${video.errorMessage || 'Inconnue'}\n\n${JSON.stringify(video, null, 2)}`, "error");
             } else if (video.status === 'processing') {
               const elapsed = Math.floor((Date.now() - new Date(video.createdAt).getTime()) / 1000);
-              statusInfo.textContent = `⏳ Traitement en cours...\n⏱️ Temps écoulé: ${elapsed}s\n🔄 Vérification automatique toutes les 3s`;
+              statusInfo.textContent = ` Traitement en cours...\n Temps écoulé: ${elapsed}s\n Vérification automatique toutes les 3s`;
             } else if (video.status === 'uploaded') {
-              statusInfo.textContent = `📤 Uploadé, en attente du transcodage...\n⏳ Le traitement devrait commencer prochainement`;
+              statusInfo.textContent = ` Uploadé, en attente du transcodage...\n Le traitement devrait commencer prochainement`;
             }
           } else {
             if (showError) {
-              statusInfo.textContent = `❌ Vidéo non trouvée dans le feed`;
-              showResult("❌ Vidéo non trouvée dans le feed", "error");
+              statusInfo.textContent = ` Vidéo non trouvée dans le feed`;
+              showResult(" Vidéo non trouvée dans le feed", "error");
             }
           }
         } else {
           if (showError) {
-            showResult(`❌ Erreur: ${data.message || 'Impossible de récupérer le feed'}`, "error");
+            showResult(` Erreur: ${data.message || 'Impossible de récupérer le feed'}`, "error");
           }
         }
       } catch (error) {
         if (showError) {
-          console.error("❌ Erreur vérification statut:", error);
-          statusInfo.textContent = `❌ Erreur de vérification: ${error.message}`;
+          console.error(" Erreur vérification statut:", error);
+          statusInfo.textContent = ` Erreur de vérification: ${error.message}`;
         }
       }
     }
@@ -190,7 +190,7 @@
       if (monitoringInterval) {
         clearInterval(monitoringInterval);
         monitoringInterval = null;
-        statusInfo.textContent = "⏹️ Suivi arrêté";
+        statusInfo.textContent = " Suivi arrêté";
       }
     }
 
