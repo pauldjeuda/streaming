@@ -2,90 +2,146 @@ const fs = require("fs");
 const path = require("path");
 const { ffmpeg } = require("./ffmpeg");
 
-const RENDITIONS = [
-  { name: "low", width: 426, height: 760, bandwidth: 600000 },    // 240p vertical - PLUS RAPIDE
-  { name: "medium", width: 640, height: 1140, bandwidth: 1200000 }, // 360p vertical
-  { name: "high", width: 720, height: 1280, bandwidth: 2500000 },   // 480p vertical - LIMITÉ
+const SEGMENT_DURATION = 4;
+
+// preset per rendition: 360p uses ultrafast so the video is watchable ASAP;
+// higher qualities use fast (better compression, runs in parallel so latency stays low)
+const LANDSCAPE_RENDITIONS = [
+  { name: "360p",  width: 640,  height: 360,  bandwidth: 800000,  audioBitrate: 128, profile: "baseline", level: "3.0", codec: "avc1.42E01E", preset: "ultrafast" },
+  { name: "480p",  width: 854,  height: 480,  bandwidth: 1500000, audioBitrate: 128, profile: "main",     level: "3.1", codec: "avc1.4D401F", preset: "fast" },
+  { name: "720p",  width: 1280, height: 720,  bandwidth: 3000000, audioBitrate: 192, profile: "high",     level: "4.0", codec: "avc1.640028", preset: "fast" },
+  { name: "1080p", width: 1920, height: 1080, bandwidth: 6000000, audioBitrate: 192, profile: "high",     level: "4.0", codec: "avc1.640028", preset: "fast" },
 ];
 
-function generateVariant(inputPath, outputDir, rendition) {
+const PORTRAIT_RENDITIONS = [
+  { name: "360p",  width: 202,  height: 360,  bandwidth: 500000,  audioBitrate: 96,  profile: "baseline", level: "3.0", codec: "avc1.42E01E", preset: "ultrafast" },
+  { name: "480p",  width: 270,  height: 480,  bandwidth: 900000,  audioBitrate: 128, profile: "main",     level: "3.1", codec: "avc1.4D401F", preset: "fast" },
+  { name: "720p",  width: 406,  height: 720,  bandwidth: 1800000, audioBitrate: 128, profile: "high",     level: "4.0", codec: "avc1.640028", preset: "fast" },
+  { name: "1080p", width: 608,  height: 1080, bandwidth: 3500000, audioBitrate: 192, profile: "high",     level: "4.0", codec: "avc1.640028", preset: "fast" },
+];
+
+function selectRenditions(meta) {
+  const { width, height } = meta;
+  const isLandscape = width >= height;
+  const baseRenditions = isLandscape ? LANDSCAPE_RENDITIONS : PORTRAIT_RENDITIONS;
+  const inputLimit = isLandscape ? height : width;
+  const getRefDim = (r) => (isLandscape ? r.height : r.width);
+  const applicable = baseRenditions.filter((r) => getRefDim(r) <= inputLimit * 1.1);
+  return applicable.length > 0 ? applicable : [baseRenditions[0]];
+}
+
+function generateVariant(inputPath, outputDir, rendition, fps) {
   return new Promise((resolve, reject) => {
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true });
-    }
+    if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
     const playlistPath = path.join(outputDir, "index.m3u8");
-    const segmentPath = path.join(outputDir, "segment_%03d.ts");
+    const segmentPath  = path.join(outputDir, "segment_%04d.ts");
+    const gopSize = Math.round((fps || 30) * SEGMENT_DURATION);
+    const preset  = rendition.preset || "fast";
 
     ffmpeg(inputPath)
-      .videoFilters(`scale=${rendition.width}:${rendition.height}:force_original_aspect_ratio=decrease,pad=${rendition.width}:${rendition.height}:(ow-iw)/2:(oh-ih)/2:black`)
+      .videoFilters(
+        `scale=${rendition.width}:${rendition.height}:force_original_aspect_ratio=decrease,` +
+        `pad=${rendition.width}:${rendition.height}:(ow-iw)/2:(oh-ih)/2:black`
+      )
       .outputOptions([
-        "-preset ultrafast",        // ULTRA RAPIDE
-        "-g 24",                   // Keyframes plus fréquents
+        "-c:v libx264",
+        `-profile:v ${rendition.profile}`,
+        `-level:v ${rendition.level}`,
+        `-preset ${preset}`,
+        `-b:v ${Math.round(rendition.bandwidth / 1000)}k`,
+        `-maxrate ${Math.round(rendition.bandwidth * 1.5 / 1000)}k`,
+        `-bufsize ${Math.round(rendition.bandwidth * 2 / 1000)}k`,
+        `-g ${gopSize}`,
+        `-keyint_min ${gopSize}`,
         "-sc_threshold 0",
+        `-force_key_frames expr:gte(t,n_forced*${SEGMENT_DURATION})`,
         "-map 0:v:0",
         "-map 0:a:0?",
-        "-c:v libx264",
         "-c:a aac",
-        `-b:v ${Math.round(rendition.bandwidth / 1000)}k`,
-        "-b:a 96k",                // Audio bitrate réduit pour vitesse
+        `-b:a ${rendition.audioBitrate}k`,
         "-ac 2",
-        "-ar 44100",               // Audio sample rate réduit
+        "-ar 48000",
         "-f hls",
-        "-hls_time 2",
+        `-hls_time ${SEGMENT_DURATION}`,
         "-hls_playlist_type vod",
+        "-hls_flags independent_segments",
         `-hls_segment_filename ${segmentPath}`,
-        "-tune fastdecode",        // Optimisé pour décodage rapide
-        "-movflags +faststart",    // Optimisé pour streaming
       ])
       .output(playlistPath)
       .on("end", () => {
-        const segments = fs
-          .readdirSync(outputDir)
-          .filter((file) => file.endsWith(".ts"))
-          .sort();
-
-        resolve({
-          playlistPath,
-          segmentPattern: segmentPath,
-          segments,
-        });
+        const segments = fs.readdirSync(outputDir).filter((f) => f.endsWith(".ts")).sort();
+        resolve({ playlistPath, segmentPattern: segmentPath, segments });
       })
-      .on("error", (err) => reject(err))
+      .on("error", reject)
       .run();
   });
 }
 
-async function generateHls(inputPath, outputDir) {
+// Standard sequential generation (kept for reference / non-progressive use)
+async function generateHls(inputPath, outputDir, meta) {
+  const fps = (meta && meta.fps) || 30;
+  const renditions = selectRenditions(meta || { width: 1920, height: 1080 });
   const results = [];
-
-  for (const rendition of RENDITIONS) {
-    const variantOutputDir = path.join(outputDir, rendition.name);
-    const generated = await generateVariant(inputPath, variantOutputDir, rendition);
+  for (const rendition of renditions) {
+    const generated = await generateVariant(inputPath, path.join(outputDir, rendition.name), rendition, fps);
     results.push({ rendition, ...generated });
+  }
+  return results;
+}
+
+// Progressive generation:
+//   1. Encode lowest quality (ultrafast) → call onFirstReady(partialResults)
+//   2. Encode remaining qualities in PARALLEL → return full results
+// This lets the caller mark the video as "ready at 360p" while higher
+// qualities are still encoding in the background.
+async function generateHlsProgressive(inputPath, outputDir, meta, onFirstReady) {
+  const fps = (meta && meta.fps) || 30;
+  const renditions = selectRenditions(meta || { width: 1920, height: 1080 });
+
+  const [first, ...rest] = renditions;
+
+  // Phase 1 — lowest quality, ultrafast
+  const firstResult = await generateVariant(inputPath, path.join(outputDir, first.name), first, fps);
+  const results = [{ rendition: first, ...firstResult }];
+
+  if (onFirstReady) await onFirstReady(results);
+
+  // Phase 2 — remaining qualities in parallel
+  if (rest.length > 0) {
+    const restResults = await Promise.all(
+      rest.map((r) => generateVariant(inputPath, path.join(outputDir, r.name), r, fps).then((g) => ({ rendition: r, ...g })))
+    );
+    results.push(...restResults);
   }
 
   return results;
 }
 
-function createMasterPlaylist(videoDir, variants) {
+function createMasterPlaylist(videoDir, variants, fps) {
   const masterPath = path.join(videoDir, "master.m3u8");
-  const content = [
-    "#EXTM3U",
-    "#EXT-X-VERSION:3",
-    ...variants.flatMap((variant) => [
-      `#EXT-X-STREAM-INF:BANDWIDTH=${variant.bandwidth},RESOLUTION=${variant.resolution}`,
-      `${variant.name}/index.m3u8`,
-    ]),
-    "",
-  ].join("\n");
+  const frameRate  = fps ? Number(fps).toFixed(3) : "30.000";
+  const lines = ["#EXTM3U", "#EXT-X-VERSION:4", ""];
 
-  fs.writeFileSync(masterPath, content, "utf8");
+  for (const variant of variants) {
+    const avgBandwidth = Math.round(variant.bandwidth * 0.8);
+    lines.push(
+      `#EXT-X-STREAM-INF:BANDWIDTH=${variant.bandwidth},AVERAGE-BANDWIDTH=${avgBandwidth},` +
+      `RESOLUTION=${variant.resolution},CODECS="${variant.codec || "avc1.640028"},mp4a.40.2",` +
+      `FRAME-RATE=${frameRate}`,
+      `${variant.name}/index.m3u8`
+    );
+  }
+  lines.push("");
+  fs.writeFileSync(masterPath, lines.join("\n"), "utf8");
   return masterPath;
 }
 
 module.exports = {
   generateHls,
+  generateHlsProgressive,
   createMasterPlaylist,
-  RENDITIONS,
+  LANDSCAPE_RENDITIONS,
+  PORTRAIT_RENDITIONS,
+  SEGMENT_DURATION,
 };

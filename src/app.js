@@ -20,7 +20,17 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/media", express.static(path.join(process.cwd(), "storage/media")));
+// HLS segments are immutable — cache them for 1 year; playlists change less often
+app.use("/media", (req, res, next) => {
+  if (req.path.endsWith(".ts")) {
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  } else if (req.path.endsWith(".m3u8")) {
+    res.setHeader("Cache-Control", "public, max-age=60");
+  } else if (req.path.endsWith(".jpg") || req.path.endsWith(".vtt")) {
+    res.setHeader("Cache-Control", "public, max-age=86400");
+  }
+  next();
+}, express.static(path.join(process.cwd(), "storage/media")));
 app.use("/public", express.static(path.join(process.cwd(), "public")));
 
 app.use("/health", healthRoutes);
@@ -34,6 +44,19 @@ app.use('/api', interactionsRoutes);
 app.use('/api', analyticsRoutes);
 app.use('/api/sessions', sessionsRoutes);
 app.use('/api/live', liveRoutes);
+
+// Serve SW and manifest at root scope so the Service Worker controls the whole origin
+app.get("/sw.js", (req, res) => {
+  res.setHeader("Content-Type", "application/javascript");
+  res.setHeader("Service-Worker-Allowed", "/");
+  res.setHeader("Cache-Control", "no-cache");
+  res.sendFile(path.join(process.cwd(), "public", "sw.js"));
+});
+
+app.get("/manifest.json", (req, res) => {
+  res.setHeader("Content-Type", "application/manifest+json");
+  res.sendFile(path.join(process.cwd(), "public", "manifest.json"));
+});
 
 app.get("/", (req, res) => {
   res.sendFile(path.join(process.cwd(), "public", "feed.html"));

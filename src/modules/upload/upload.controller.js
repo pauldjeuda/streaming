@@ -30,32 +30,18 @@ async function uploadVideo(req, res, next) {
       userId,
     });
 
-    console.log(`🚀 Upload terminé pour vidéo ${video._id}: "${video.caption}" - Lancement du transcodage...`);
-    console.log(`📁 Fichier: ${req.file.originalname} (${req.file.mimetype}, ${(req.file.size / 1024 / 1024).toFixed(2)}MB)`);
+    console.log(`[upload] ${video._id} "${video.caption}" — ${(req.file.size / 1024 / 1024).toFixed(1)} MB, transcoding started`);
 
-    // Lancer le transcodage de manière plus fiable
-    setTimeout(async () => {
+    // Start transcoding immediately — no delay
+    setImmediate(async () => {
+      const t0 = Date.now();
       try {
-        console.log(`⚡ Début du transcodage pour ${video._id}`);
-        const startTime = Date.now();
-        
         await processVideo(video._id);
-        
-        const endTime = Date.now();
-        const duration = (endTime - startTime) / 1000;
-        
-        console.log(`✅ Transcodage terminé pour ${video._id} en ${duration.toFixed(2)}s`);
+        console.log(`[upload] ${video._id} done in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
       } catch (error) {
-        console.error(`❌ Erreur transcodage pour ${video._id}:`, error.message);
-        
-        // Mettre à jour le statut en "failed" avec le message d'erreur
-        const Video = require("../videos/video.model");
-        await Video.findByIdAndUpdate(video._id, { 
-          status: "failed", 
-          errorMessage: error.message 
-        });
+        console.error(`[upload] ${video._id} failed: ${error.message}`);
       }
-    }, 1000); // Lancer après 1 seconde pour être sûr que l'upload est bien terminé
+    });
 
     return res.status(201).json({
       success: true,
