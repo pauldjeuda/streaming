@@ -31,6 +31,14 @@ async function getFeed(req, res, next) {
     observeHistogram("feed_response_ms", Date.now() - startedAt, { route: "/api/v2/feed" });
     incrementCounter("feed_requests_total", 1, { region: req.headers["x-region"] || "global" });
 
+    // Link prefetch hints so the browser (and CDN) can pipeline the next playlists
+    const prefetchLinks = payload
+      .slice(1, 3)
+      .filter((v) => v.hlsUrl)
+      .map((v) => `<${v.hlsUrl}>; rel=prefetch`)
+      .join(", ");
+    if (prefetchLinks) res.setHeader("Link", prefetchLinks);
+
     return res.json({
       success: true,
       data: payload,

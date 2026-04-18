@@ -70,6 +70,7 @@ function serializeVideo(video) {
     targetAspectRatio: video.targetAspectRatio,
     segmentDuration: video.segmentDuration,
     thumbnailUrl: buildMediaUrl(video.thumbnailPath),
+    thumbnailSpriteUrl: buildMediaUrl(video.thumbnailSpritePath),
     hlsUrl: buildMediaUrl(video.hlsMasterPath),
     variants: (video.variants || []).map((variant) => ({
       ...variant.toObject ? variant.toObject() : variant,

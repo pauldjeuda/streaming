@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Short streaming vertical</title>
+  <title>Short streaming</title>
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#050505" />
   <style>
@@ -11,42 +11,93 @@
     html, body { margin: 0; width: 100%; height: 100%; background: #050505; color: #fff; font-family: Arial, sans-serif; overflow: hidden; }
     .app, .video-container { width: 100vw; height: 100vh; position: relative; }
     video { width: 100%; height: 100%; object-fit: cover; background: #000; }
-    .topbar, .side, .bottom, .panel { position: absolute; z-index: 4; }
-    .topbar { top: 12px; left: 12px; right: 12px; display: flex; gap: 12px; justify-content: space-between; }
-    .chip, button { background: rgba(10,10,10,.58); border: 1px solid rgba(255,255,255,.14); color: #fff; border-radius: 14px; padding: 10px 12px; }
-    button { cursor: pointer; }
-    .panel { top: 62px; left: 12px; max-width: min(92vw, 420px); display: grid; gap: 8px; }
-    .side { right: 12px; bottom: 140px; display: flex; flex-direction: column; gap: 8px; }
-    .bottom { left: 0; right: 0; bottom: 0; padding: 18px; background: linear-gradient(to top, rgba(0,0,0,.84), transparent); }
-    .caption { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
-    .meta { opacity: .9; font-size: 13px; line-height: 1.45; }
-    .progress-wrap { margin-top: 12px; height: 4px; background: rgba(255,255,255,.15); border-radius: 999px; overflow: hidden; }
-    .progress-bar { height: 100%; width: 0; background: linear-gradient(90deg, #00d4ff, #7c5cff); }
-    .buffering { position: absolute; inset: 0; display: none; place-items: center; background: rgba(0,0,0,.26); z-index: 5; }
-    .buffering span { padding: 10px 14px; border-radius: 999px; background: rgba(0,0,0,.7); }
+
+    /* ── Topbar ─────────────────────────────────────────── */
+    .topbar { position: absolute; top: 12px; left: 12px; right: 12px; z-index: 6; display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+    .chip { background: rgba(10,10,10,.6); border: 1px solid rgba(255,255,255,.14); color: #fff; border-radius: 14px; padding: 8px 12px; font-size: 13px; }
+    .network-badge { font-size: 11px; padding: 4px 8px; border-radius: 8px; background: rgba(0,0,0,.5); border: 1px solid rgba(255,255,255,.2); }
+    .network-badge.good  { color: #4ade80; border-color: #4ade80; }
+    .network-badge.ok    { color: #facc15; border-color: #facc15; }
+    .network-badge.slow  { color: #f87171; border-color: #f87171; }
+
+    /* ── Side buttons ────────────────────────────────────── */
+    .side { position: absolute; right: 12px; bottom: 140px; z-index: 4; display: flex; flex-direction: column; gap: 10px; }
+    .side button { background: rgba(10,10,10,.58); border: 1px solid rgba(255,255,255,.14); color: #fff; border-radius: 14px; padding: 10px 12px; cursor: pointer; font-size: 18px; min-width: 48px; }
+    #speedBtn { font-size: 13px; font-weight: 700; }
+
+    /* ── Bottom overlay ──────────────────────────────────── */
+    .bottom { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; padding: 14px 16px 18px; background: linear-gradient(to top, rgba(0,0,0,.88) 0%, transparent 100%); }
+    .caption { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
+    .meta { opacity: .85; font-size: 12px; line-height: 1.45; margin-bottom: 10px; }
+
+    /* ── Progress bar ────────────────────────────────────── */
+    .progress-wrap { position: relative; height: 20px; display: flex; align-items: center; cursor: pointer; touch-action: none; }
+    .progress-track { position: absolute; left: 0; right: 0; height: 4px; background: rgba(255,255,255,.18); border-radius: 99px; overflow: hidden; pointer-events: none; }
+    .progress-buffered { position: absolute; left: 0; height: 100%; width: 0; background: rgba(255,255,255,.35); transition: width .3s; }
+    .progress-played { position: absolute; left: 0; height: 100%; width: 0; background: linear-gradient(90deg, #fe2c55, #ff4e6a); }
+    .progress-handle { position: absolute; width: 14px; height: 14px; background: #fff; border-radius: 50%; transform: translateX(-50%) scale(0); transition: transform .15s; pointer-events: none; top: 50%; margin-top: -7px; }
+    .progress-wrap:hover .progress-handle,
+    .progress-wrap.scrubbing .progress-handle { transform: translateX(-50%) scale(1); }
+    .progress-wrap:hover .progress-track,
+    .progress-wrap.scrubbing .progress-track { height: 6px; }
+
+    /* ── Sprite preview on scrub ─────────────────────────── */
+    .sprite-preview { position: absolute; bottom: 28px; transform: translateX(-50%); background: #000; border: 2px solid rgba(255,255,255,.3); border-radius: 6px; overflow: hidden; display: none; pointer-events: none; flex-direction: column; align-items: center; }
+    .sprite-preview.visible { display: flex; }
+    .sprite-img { width: 160px; height: 90px; background-size: auto; background-repeat: no-repeat; flex-shrink: 0; }
+    .sprite-time { font-size: 11px; padding: 3px 6px; background: rgba(0,0,0,.7); width: 100%; text-align: center; }
+
+    /* ── Buffering overlay ───────────────────────────────── */
+    .buffering { position: absolute; inset: 0; display: none; place-items: center; background: rgba(0,0,0,.3); z-index: 5; }
+    .buffering span { padding: 10px 16px; border-radius: 999px; background: rgba(0,0,0,.75); font-size: 14px; }
+
+    /* ── Heart animation ─────────────────────────────────── */
+    .heart-anim { position: absolute; z-index: 10; font-size: 48px; pointer-events: none; animation: floatHeart .9s ease-out forwards; }
+    @keyframes floatHeart {
+      0%   { opacity: 1; transform: scale(.6) translateY(0); }
+      40%  { opacity: 1; transform: scale(1.2) translateY(-40px); }
+      100% { opacity: 0; transform: scale(.8) translateY(-100px); }
+    }
+
+    /* ── Play/pause tap flash ────────────────────────────── */
+    .tap-flash { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 7; }
+    .tap-flash span { font-size: 72px; opacity: 0; animation: tapFade .4s ease-out forwards; }
+    @keyframes tapFade { 0% { opacity:.8; transform:scale(.7); } 100% { opacity:0; transform:scale(1.3); } }
   </style>
 </head>
 <body>
   <div class="app">
     <div class="topbar">
       <div class="chip" id="status">Chargement...</div>
+      <div class="network-badge good" id="networkBadge">—</div>
     </div>
 
     <div class="video-container" id="videoContainer">
-      <video id="video" playsinline muted autoplay></video>
-      <div class="buffering" id="buffering"><span>Chargement ...</span></div>
+      <video id="video" playsinline muted autoplay loop></video>
+      <div class="buffering" id="buffering"><span>Chargement…</span></div>
+      <div class="tap-flash" id="tapFlash"><span id="tapIcon"></span></div>
 
       <div class="side">
-        <button id="likeBtn">❤</button>
-        <button id="toggleBtn">Pause</button>
-        <button id="muteBtn">Son</button>
+        <button id="likeBtn" title="Like (ou double-tap)">🤍</button>
+        <button id="toggleBtn" title="Pause / Play">⏸</button>
+        <button id="muteBtn" title="Muet">🔇</button>
+        <button id="speedBtn" title="Vitesse">1×</button>
       </div>
 
       <div class="bottom">
         <div class="caption" id="caption"></div>
         <div class="meta" id="meta"></div>
-        <div class="progress-wrap">
-          <div class="progress-bar" id="progressBar"></div>
+
+        <div class="progress-wrap" id="progressWrap">
+          <div class="progress-track">
+            <div class="progress-buffered" id="progressBuffered"></div>
+            <div class="progress-played" id="progressPlayed"></div>
+          </div>
+          <div class="progress-handle" id="progressHandle"></div>
+          <div class="sprite-preview" id="spritePreview">
+            <div class="sprite-img" id="spriteImg"></div>
+            <div class="sprite-time" id="spriteTime"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -54,543 +105,532 @@
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script>
-    let video = document.getElementById("video");
-    const statusEl = document.getElementById("status");
-    const captionEl = document.getElementById("caption");
-    const metaEl = document.getElementById("meta");
-    const progressBar = document.getElementById("progressBar");
+    // ── State ────────────────────────────────────────────────────────────────
+    let video         = document.getElementById("video");
+    const statusEl    = document.getElementById("status");
+    const captionEl   = document.getElementById("caption");
+    const metaEl      = document.getElementById("meta");
     const bufferingEl = document.getElementById("buffering");
+    const likeBtn     = document.getElementById("likeBtn");
+    const toggleBtn   = document.getElementById("toggleBtn");
+    const muteBtn     = document.getElementById("muteBtn");
+    const speedBtn    = document.getElementById("speedBtn");
+    const networkBadge= document.getElementById("networkBadge");
+    const progressWrap= document.getElementById("progressWrap");
+    const progressPlayed   = document.getElementById("progressPlayed");
+    const progressBuffered = document.getElementById("progressBuffered");
+    const progressHandle   = document.getElementById("progressHandle");
+    const spritePreview    = document.getElementById("spritePreview");
+    const spriteImg        = document.getElementById("spriteImg");
+    const spriteTime       = document.getElementById("spriteTime");
 
-    const likeBtn = document.getElementById("likeBtn");
-    const toggleBtn = document.getElementById("toggleBtn");
-    const muteBtn = document.getElementById("muteBtn");
+    let hlsInstance   = null;
+    let feed          = [];
+    let currentIndex  = 0;
+    let sessionId     = localStorage.getItem("demo_session_id") ||
+                        `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    let userLikes         = new Set();
+    let preloadCache      = new Map();
+    let preloadedInstances= new Map();
+    let preloadedBuffers  = new Map();
+    let isTransitioning   = false;
+    let isFetchingMore    = false;
+    let viewTracked       = false;      // reset per video
+    let currentSpeed      = 1;
+    let currentSpriteUrl  = null;       // sprite for active video
+    const SPEEDS = [0.5, 1, 1.25, 1.5, 2];
 
-    let hlsInstance = null;
-    let feed = [];
-    let currentIndex = 0;
-    let sessionId = localStorage.getItem("demo_session_id") || `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    let userLikes = new Set();
-    let preloadCache = new Map();
-    let preloadedInstances = new Map();
-    let preloadedBuffers = new Map();
-    let isTransitioning = false;
-    let isFetchingMore = false; // Guard against double fetch of next feed page
+    // Sprite constants — must match thumbnail.js
+    const SPRITE_INTERVAL = 5;
+    const SPRITE_COLUMNS  = 10;
+    const SPRITE_W        = 160;
+    const SPRITE_H        = 90;
 
     localStorage.setItem("demo_session_id", sessionId);
 
-    // safeFetch — try network, queue in localStorage if offline, replay on reconnect
+    // ── Network awareness ─────────────────────────────────────────────────────
+    function getNetworkProfile() {
+      const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+      const type = conn?.effectiveType || "4g";
+      if (type === "slow-2g" || type === "2g") {
+        networkBadge.textContent = "2G"; networkBadge.className = "network-badge slow";
+        return { maxBufferLength: 8, maxMaxBufferLength: 16, maxBufferSize: 8e6, startLevel: 0, preloadCount: 0 };
+      }
+      if (type === "3g") {
+        networkBadge.textContent = "3G"; networkBadge.className = "network-badge ok";
+        return { maxBufferLength: 20, maxMaxBufferLength: 40, maxBufferSize: 30e6, startLevel: -1, preloadCount: 1 };
+      }
+      networkBadge.textContent = "4G"; networkBadge.className = "network-badge good";
+      return { maxBufferLength: 30, maxMaxBufferLength: 60, maxBufferSize: 60e6, startLevel: -1, preloadCount: 2 };
+    }
+
+    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (conn) conn.addEventListener("change", () => { getNetworkProfile(); });
+
+    // ── Offline utilities ─────────────────────────────────────────────────────
     async function safeFetch(url, options = {}) {
-      try {
-        return await fetch(url, options);
-      } catch {
-        // Store event for later replay
-        const pending = JSON.parse(localStorage.getItem("pendingEvents") || "[]");
-        pending.push({ url, options, ts: Date.now() });
-        localStorage.setItem("pendingEvents", JSON.stringify(pending));
+      try { return await fetch(url, options); }
+      catch {
+        const q = JSON.parse(localStorage.getItem("pendingEvents") || "[]");
+        q.push({ url, options, ts: Date.now() });
+        localStorage.setItem("pendingEvents", JSON.stringify(q));
         return null;
       }
     }
 
     async function replayPendingEvents() {
-      const pending = JSON.parse(localStorage.getItem("pendingEvents") || "[]");
-      if (!pending.length) return;
+      const q = JSON.parse(localStorage.getItem("pendingEvents") || "[]");
+      if (!q.length) return;
       localStorage.removeItem("pendingEvents");
-      for (const { url, options } of pending) {
+      for (const { url, options } of q) {
         try { await fetch(url, options); } catch { /* ignore */ }
       }
     }
 
     window.addEventListener("online", replayPendingEvents);
 
-    // Auto-load next feed page when approaching the last 3 videos
+    // ── Feed management ───────────────────────────────────────────────────────
+    async function fetchFeed(offset = 0) {
+      const res = await fetch(`/api/v2/feed?session_id=${sessionId}&limit=20&offset=${offset}`);
+      const json = await res.json();
+      if (!json.success) throw new Error(json.message || "Erreur feed");
+      return json.data || [];
+    }
+
     async function loadMoreFeedIfNeeded() {
-      if (isFetchingMore) return;
-      if (currentIndex < feed.length - 3) return;
+      if (isFetchingMore || currentIndex < feed.length - 3) return;
       isFetchingMore = true;
       try {
         const more = await fetchFeed(feed.length);
-        if (more.length > 0) feed.push(...more);
-      } catch { /* non-fatal */ } finally {
-        isFetchingMore = false;
-      }
+        if (more.length) feed.push(...more);
+      } catch { /* non-fatal */ } finally { isFetchingMore = false; }
     }
 
-    async function fetchFeed(offset = 0) {
-      const response = await fetch(`/api/v2/feed?session_id=${sessionId}&limit=20&offset=${offset}`);
-      const result = await response.json();
-      if (!result.success) throw new Error(result.message || "Erreur feed");
-      return result.data || [];
-    }
-
-    // Précharger les 2 prochaines vidéos en arrière-plan pour une fluidité
+    // ── Preloading ────────────────────────────────────────────────────────────
     async function preloadNextVideos() {
-      if (isTransitioning) return; // Ne pas précharger pendant transition
-      
-      const nextIndices = [currentIndex + 1, currentIndex + 2];
-      
-      for (const index of nextIndices) {
-        if (index >= feed.length) continue;
-        
-        const video = feed[index];
-        if (!video || video.status !== 'ready' || preloadCache.has(video.id)) continue;
-        
+      if (isTransitioning) return;
+      const net = getNetworkProfile();
+      const indices = Array.from({ length: net.preloadCount }, (_, i) => currentIndex + 1 + i);
+
+      for (const idx of indices) {
+        if (idx >= feed.length) continue;
+        const item = feed[idx];
+        if (!item || item.status !== "ready" || preloadCache.has(item.id)) continue;
+
         try {
-          // Créer une instance HLS cachée pour le pré-préchargement
-          const hiddenVideo = document.createElement('video');
-          hiddenVideo.muted = true;
-          hiddenVideo.preload = 'auto';
-          hiddenVideo.style.display = 'none';
-          hiddenVideo.style.position = 'absolute';
-          hiddenVideo.style.top = '-9999px';
-          hiddenVideo.style.left = '-9999px';
-          hiddenVideo.setAttribute('playsinline', '');
-          document.body.appendChild(hiddenVideo);
-          
-          let hlsPreload = null;
-          const videoUrl = video.signedPlayback || video.hlsUrl;
-          
+          const hidden = document.createElement("video");
+          hidden.muted = true; hidden.preload = "auto";
+          Object.assign(hidden.style, { display: "none", position: "absolute", top: "-9999px", left: "-9999px" });
+          hidden.setAttribute("playsinline", "");
+          document.body.appendChild(hidden);
+
+          const url = item.signedPlayback || item.hlsUrl;
+          let hlsPre = null;
+
           if (window.Hls && Hls.isSupported()) {
-            hlsPreload = new Hls({ 
-              maxBufferLength: 120,        // Buffer extrêmement grand
-              backBufferLength: 30,        // Garder beaucoup en mémoire
-              maxMaxBufferLength: 240,     // Buffer maximum immense
-              enableWorker: true,
-              lowLatencyMode: true,
-              maxBufferSize: 120 * 1000 * 1000,  // 120MB buffer
-              maxBufferHole: 0.3,
-              startLevel: -1,              // Commencer à la plus basse qualité
-              capLevelToPlayerSize: true,
-              maxFragLookUpTolerance: 0.25, // Plus tolérant aux fragments
-              liveSyncDurationCount: 3,    // Sync plus rapide
-              liveMaxLatencyDurationCount: Infinity,
-              preferManagedMediaSource: true // Optimiser pour MediaSource
+            hlsPre = new Hls({
+              maxBufferLength: net.maxBufferLength * 4,
+              maxMaxBufferLength: net.maxMaxBufferLength * 4,
+              maxBufferSize: net.maxBufferSize * 2,
+              enableWorker: true, startLevel: net.startLevel,
+              capLevelToPlayerSize: true, preferManagedMediaSource: true,
             });
-            
-            hlsPreload.loadSource(videoUrl);
-            hlsPreload.attachMedia(hiddenVideo);
-            
-            // PRÉ-PRÉCHARGEMENT AGRESSIF
-            const aggressivePreload = async () => {
-              try {
-                await hiddenVideo.play();
-                hiddenVideo.pause();
-                
-                // Charger plusieurs segments en parallèle
-                for (let i = 0; i < 5; i++) {
-                  hiddenVideo.currentTime = i * 2;
-                  await new Promise(resolve => setTimeout(resolve, 200));
-                }
-                
-                hiddenVideo.currentTime = 0;
-                
-                // Marquer comme complètement préchargé
-                preloadedBuffers.set(video.id, {
-                  fullyLoaded: true,
-                  segmentsLoaded: 10,
-                  loadTime: Date.now()
-                });
-                
-                console.log(`🚀 Vidéo ${video.id} AGRESSIVEMENT préchargée (10 segments)`);
-              } catch (error) {
-                console.log(`⚠️ Préchargement partiel ${video.id}:`, error.message);
-              }
-            };
-            
-            // Démarrer le pré-préchargement
-            aggressivePreload();
-            
-            // Écouter les événements de chargement pour monitoring
-            let segmentCount = 0;
-            hlsPreload.on(Hls.Events.FRAG_BUFFERED, () => {
-              segmentCount++;
-              if (segmentCount % 3 === 0) {
-                console.log(`� ${segmentCount} segments chargés pour ${video.id}`);
-              }
-            });
-            
-            preloadedInstances.set(video.id, { 
-              hls: hlsPreload, 
-              video: hiddenVideo, 
-              fullyLoaded: false,
-              preloadStartTime: Date.now()
-            });
+            hlsPre.loadSource(url);
+            hlsPre.attachMedia(hidden);
+            hidden.play().then(() => { hidden.pause(); hidden.currentTime = 0; }).catch(() => {});
+            preloadedInstances.set(item.id, { hls: hlsPre, video: hidden, preloadStartTime: Date.now() });
           } else {
-            hiddenVideo.src = videoUrl;
-            hiddenVideo.load();
-            preloadedInstances.set(video.id, { video: hiddenVideo });
+            hidden.src = url; hidden.load();
+            preloadedInstances.set(item.id, { video: hidden });
           }
-          
-          preloadCache.set(video.id, true);
-          
-        } catch (error) {
-          console.error(`❌ Erreur préchargement ${video.id}:`, error);
-        }
+
+          preloadedBuffers.set(item.id, { fullyLoaded: true });
+          preloadCache.set(item.id, true);
+        } catch (e) { console.warn("preload error", e); }
       }
     }
 
-    // Nettoyer les instances préchargées anciennes - VERSION OPTIMISÉE
     function cleanupOldPreloads() {
-      const keepIds = new Set();
+      const keep = new Set();
       for (let i = Math.max(0, currentIndex - 1); i <= currentIndex + 2; i++) {
-        if (feed[i]) keepIds.add(feed[i].id);
+        if (feed[i]) keep.add(feed[i].id);
       }
-      
-      for (const [videoId, instance] of preloadedInstances) {
-        if (!keepIds.has(videoId)) {
-          if (instance.hls) {
-            instance.hls.stopLoad(); // Arrêter le chargement en premier
-            setTimeout(() => {
-              instance.hls.destroy();
-            }, 100);
-          }
-          if (instance.video) instance.video.remove();
-          preloadedInstances.delete(videoId);
-          preloadCache.delete(videoId);
-          preloadedBuffers.delete(videoId);
-        }
+      for (const [id, inst] of preloadedInstances) {
+        if (keep.has(id)) continue;
+        if (inst.hls) { inst.hls.stopLoad(); setTimeout(() => inst.hls.destroy(), 100); }
+        if (inst.video) inst.video.remove();
+        preloadedInstances.delete(id);
+        preloadCache.delete(id);
+        preloadedBuffers.delete(id);
       }
     }
 
+    // ── View tracking (loop-aware) ────────────────────────────────────────────
+    function setupLoopTracking(v, videoItem) {
+      viewTracked = false;
+      let wasNearEnd = false;
+
+      // Track view after playing ≥3 s (first watch)
+      const viewTimer = setTimeout(() => {
+        if (!viewTracked) {
+          viewTracked = true;
+          safeFetch(`/api/video/${videoItem.id}/view`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId, watchTime: v.currentTime || 0 }),
+          });
+        }
+      }, 3000);
+
+      v._clearLoopTracking = () => clearTimeout(viewTimer);
+
+      v.addEventListener("timeupdate", function trackLoop() {
+        if (!v.duration) return;
+        if (v.currentTime > v.duration - 0.8) wasNearEnd = true;
+        if (wasNearEnd && v.currentTime < 0.5) {
+          wasNearEnd = false;
+          // Video looped — track every loop as a re-watch event (non-blocking)
+          safeFetch(`/api/playback/${videoItem.id}/events`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId, eventType: "loop", position: 0 }),
+          });
+        }
+        v._loopTracker = trackLoop;
+      });
+    }
+
+    // ── Main play function ────────────────────────────────────────────────────
     async function playVideo(index) {
       if (index < 0 || index >= feed.length) return;
-      
-      // Éviter les transitions multiples
       if (isTransitioning) return;
       isTransitioning = true;
-      
+
       currentIndex = index;
       const current = feed[currentIndex];
-      
-      // Gérer les vidéos en processing
-      if (current.status === 'processing') {
+
+      if (current.status === "processing") {
         statusEl.textContent = `EN TRAITEMENT ${currentIndex + 1}/${feed.length}`;
-        captionEl.textContent = current.caption || 'Vidéo en cours de traitement...';
-        metaEl.textContent = `Transcodage en cours... • Créée: ${new Date(current.createdAt).toLocaleTimeString()}`;
-        
-        // Afficher un placeholder ou thumbnail si disponible
-        if (current.thumbnailUrl) {
-          video.poster = current.thumbnailUrl;
-          video.src = '';
-        } else {
-          video.poster = '';
-          video.src = '';
-        }
-        
-        bufferingEl.innerHTML = '<span>Vidéo en cours de traitement...</span>';
-        bufferingEl.style.display = 'grid';
+        captionEl.textContent = current.caption || "Vidéo en cours de traitement…";
+        metaEl.textContent = `Transcodage… • ${new Date(current.createdAt).toLocaleTimeString()}`;
+        if (current.thumbnailUrl) video.poster = current.thumbnailUrl;
+        bufferingEl.innerHTML = "<span>Vidéo en cours de traitement…</span>";
+        bufferingEl.style.display = "grid";
         isTransitioning = false;
         return;
       }
-      
-      statusEl.textContent = `Lecture ${currentIndex + 1}/${feed.length}`;
-      captionEl.textContent = current.caption || 'Sans légende';
-      metaEl.textContent = `Durée ${Number(current.duration || 0).toFixed(1)}s • ${current.width}x${current.height} • vues ${current.stats.views} • likes ${current.stats.likes}`;
-      
-      // Mettre à jour le bouton like en fonction de l'état
-      if (userLikes.has(current.id)) {
-        likeBtn.textContent = '❤️'; // Like actif
-        likeBtn.style.color = '#ff0066';
-      } else {
-        likeBtn.textContent = '🤍'; // Like inactif
-        likeBtn.style.color = '#fff';
-      }
-      
-      // NE JAMAIS afficher le buffering pour les transitions
-      bufferingEl.style.display = 'none';
-      
-      // Vérifier si la vidéo est déjà préchargée avec buffer
-      const preloaded = preloadedInstances.get(current.id);
-      const bufferInfo = preloadedBuffers.get(current.id);
+
+      statusEl.textContent = `${currentIndex + 1} / ${feed.length}`;
+      captionEl.textContent = current.caption || "";
+      metaEl.textContent = `${Number(current.duration || 0).toFixed(1)}s • ${current.width}×${current.height} • 👁 ${current.stats.views} • ❤ ${current.stats.likes}`;
+      likeBtn.textContent = userLikes.has(current.id) ? "❤️" : "🤍";
+      likeBtn.style.color  = userLikes.has(current.id) ? "#fe2c55" : "#fff";
+      currentSpriteUrl = current.thumbnailSpriteUrl || null;
+      bufferingEl.style.display = "none";
+
+      const net = getNetworkProfile();
       const videoUrl = current.signedPlayback || current.hlsUrl;
-      
-      if (preloaded && (bufferInfo?.fullyLoaded || Date.now() - preloaded.preloadStartTime < 3000)) {
-        // UTILISER L'INSTANCE PRÉCHARGÉE - TRANSITION ZERO LATENCE
-        console.log(`⚡ TRANSITION ZERO LATENCE pour ${current.id}`);
-        
-        if (preloaded.hls) {
-          // Détruire l'instance actuelle silencieusement
-          if (hlsInstance) {
-            try { hlsInstance.destroy(); } catch (e) {}
-          }
-          
-          const oldVideo = video;
-          const newVideo = preloaded.video;
-          newVideo.id = "video";
-          newVideo.muted = oldVideo.muted;
-          newVideo.style.display = 'block';
-          newVideo.style.position = 'static';
-          
-          oldVideo.parentNode.insertBefore(newVideo, oldVideo);
-          oldVideo.remove();
-          
-          video = newVideo;
-          attachVideoEvents(video);
-          
-          hlsInstance = preloaded.hls;
-          
-          // Démarrer la lecture immédiatement
-          const playPromise = video.play();
-          if (playPromise !== undefined) playPromise.catch(() => {});
-          
-          // Nettoyer de la liste des préchargés
-          preloadedInstances.delete(current.id);
-          preloadCache.delete(current.id);
-          preloadedBuffers.delete(current.id);
-          
-        } else {
-          // Utiliser la vidéo préchargée
-          const oldVideo = video;
-          const newVideo = preloaded.video;
-          newVideo.id = "video";
-          newVideo.muted = oldVideo.muted;
-          newVideo.style.display = 'block';
-          newVideo.style.position = 'static';
-          
-          oldVideo.parentNode.insertBefore(newVideo, oldVideo);
-          oldVideo.remove();
-          
-          video = newVideo;
-          attachVideoEvents(video);
-          
-          video.play().catch(() => {});
-        }
-        
+      const preloaded = preloadedInstances.get(current.id);
+
+      if (preloaded?.hls || preloaded?.video) {
+        // ── Zero-latency transition using preloaded element ──
+        if (video._clearLoopTracking) video._clearLoopTracking();
+        if (hlsInstance) { try { hlsInstance.destroy(); } catch {} }
+
+        const oldVideo = video;
+        const newVideo = preloaded.video;
+        newVideo.id = "video";
+        newVideo.muted = oldVideo.muted;
+        newVideo.loop = true;
+        newVideo.playbackRate = currentSpeed;
+        newVideo.style.cssText = "width:100%;height:100%;object-fit:cover;background:#000;";
+        oldVideo.parentNode.insertBefore(newVideo, oldVideo);
+        oldVideo.remove();
+        video = newVideo;
+
+        hlsInstance = preloaded.hls || null;
+        attachVideoEvents(video, current);
+        video.play().catch(() => {});
+
+        preloadedInstances.delete(current.id);
+        preloadCache.delete(current.id);
+        preloadedBuffers.delete(current.id);
       } else {
-        // CHARGEMENT NORMAL AVEC BUFFER OPTIMISÉ ULTRA-RAPIDE
-        console.log(`Chargement normal pour ${current.id}`);
-        
-        if (hlsInstance) { 
-          try {
-            hlsInstance.destroy();
-          } catch (e) {}
-          hlsInstance = null;
-        }
-        
-        if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        // ── Normal load ──
+        if (video._clearLoopTracking) video._clearLoopTracking();
+        if (hlsInstance) { try { hlsInstance.destroy(); } catch {} hlsInstance = null; }
+        video.loop = true;
+        video.playbackRate = currentSpeed;
+
+        if (video.canPlayType("application/vnd.apple.mpegurl")) {
           video.src = videoUrl;
-          video.load(); // Forcer le chargement immédiat
+          video.load();
         } else if (window.Hls && Hls.isSupported()) {
-          hlsInstance = new Hls({ 
-            maxBufferLength: 30,        // Buffer moyen pour démarrage rapide
-            backBufferLength: 10,
-            maxMaxBufferLength: 60,
-            enableWorker: true,
-            lowLatencyMode: true,
-            startLevel: -1,            // Commencer au niveau le plus bas
-            capLevelToPlayerSize: true,
-            abrEwmaFastLive: 1.0,       // ABR ultra-réactif
-            abrEwmaSlowLive: 3.0,
-            abrEwmaVod: 1.0,
-            abrEwmaDefault: 2.0,
-            maxFragLookUpTolerance: 0.2,
-            preferManagedMediaSource: true
+          hlsInstance = new Hls({
+            maxBufferLength: net.maxBufferLength,
+            maxMaxBufferLength: net.maxMaxBufferLength,
+            maxBufferSize: net.maxBufferSize,
+            enableWorker: true, startLevel: net.startLevel,
+            capLevelToPlayerSize: true, preferManagedMediaSource: true,
+            abrEwmaDefaultEstimate: 1e6,
           });
           hlsInstance.loadSource(videoUrl);
           hlsInstance.attachMedia(video);
         }
-        
-        // Forcer la lecture immédiate
         video.play().catch(() => {});
       }
-      
-      // Nettoyer les anciens préchargements et précharger les prochains
+
+      setupLoopTracking(video, current);
       cleanupOldPreloads();
-
-      // Charger la page suivante du feed si on approche de la fin
       loadMoreFeedIfNeeded();
-
-      // Précharger les prochaines vidéos avec un très petit délai
-      setTimeout(() => {
-        isTransitioning = false;
-        preloadNextVideos();
-      }, 50);
+      setTimeout(() => { isTransitioning = false; preloadNextVideos(); }, 50);
     }
 
-    // Actualiser les likes automatiquement toutes les 5 secondes
-    async function updateLikes() {
-      if (feed.length === 0) return;
-      
-      try {
-        const refreshedFeed = await fetchFeed(0);
-        
-        // Mettre à jour les likes dans le feed actuel
-        refreshedFeed.forEach(newVideo => {
-          const existingIndex = feed.findIndex(v => v.id === newVideo.id);
-          if (existingIndex !== -1) {
-            feed[existingIndex].stats.likes = newVideo.stats.likes;
-            feed[existingIndex].stats.views = newVideo.stats.views;
-            
-            // Si c'est la vidéo actuelle, mettre à jour l'affichage
-            if (existingIndex === currentIndex) {
-              const current = feed[currentIndex];
-              metaEl.textContent = `Durée ${Number(current.duration || 0).toFixed(1)}s • ${current.width}x${current.height} • vues ${current.stats.views} • likes ${current.stats.likes}`;
-            }
-          }
+    // ── Video events ──────────────────────────────────────────────────────────
+    function attachVideoEvents(v, videoItem) {
+      // Remove old listeners by cloning (simplest approach for swap case)
+      // Progress update
+      v.addEventListener("timeupdate", () => {
+        if (!v.duration) return;
+        const pct = (v.currentTime / v.duration) * 100;
+        progressPlayed.style.width = `${pct}%`;
+        progressHandle.style.left  = `${pct}%`;
+        // Buffered
+        if (v.buffered.length) {
+          const bufPct = (v.buffered.end(v.buffered.length - 1) / v.duration) * 100;
+          progressBuffered.style.width = `${bufPct}%`;
+        }
+      });
+
+      // Buffering indicator — show after 800 ms of stall (not 5s like before)
+      let stallTimer;
+      v.addEventListener("waiting",  () => { stallTimer = setTimeout(() => { bufferingEl.style.display = "grid"; }, 800); });
+      v.addEventListener("playing",  () => { clearTimeout(stallTimer); bufferingEl.style.display = "none"; });
+      v.addEventListener("canplay",  () => { clearTimeout(stallTimer); bufferingEl.style.display = "none"; });
+      v.addEventListener("seeked",   () => { clearTimeout(stallTimer); bufferingEl.style.display = "none"; });
+
+      v.addEventListener("pause", () => {
+        toggleBtn.textContent = "▶";
+        const item = feed[currentIndex];
+        if (item) safeFetch(`/api/playback/${item.id}/events`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId, eventType: "pause", position: v.currentTime || 0 }),
         });
-      } catch (error) {
-        console.error('Erreur mise à jour likes:', error);
-      }
+      });
+      v.addEventListener("play",  () => { toggleBtn.textContent = "⏸"; });
     }
 
-    async function bootstrap() {
-      // Register Service Worker for offline caching of HLS segments
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js').catch(() => {});
-      }
+    attachVideoEvents(video, null);
 
-      // Replay any events queued while offline
-      replayPendingEvents();
-
-      bufferingEl.style.display = 'grid';
-      feed = await fetchFeed(0);
-      bufferingEl.style.display = 'none';
-      await playVideo(0);
-      
-      // Précharger les 2 premières vidéos après le démarrage pour une fluidité
-      setTimeout(() => {
-        preloadNextVideos();
-      }, 200);
-      
-      // Démarrer un préchargement continu en arrière-plan
-      setInterval(() => {
-        if (!isTransitioning) {
-          preloadNextVideos();
-        }
-      }, 3000);
+    // ── Double-tap to like ────────────────────────────────────────────────────
+    let lastTapTime = 0;
+    function showHeart(x, y) {
+      const el = document.createElement("div");
+      el.className = "heart-anim";
+      el.textContent = "❤️";
+      el.style.left = `${x - 24}px`;
+      el.style.top  = `${y - 24}px`;
+      document.getElementById("videoContainer").appendChild(el);
+      el.addEventListener("animationend", () => el.remove());
     }
 
-    likeBtn.onclick = async () => {
-      const current = feed[currentIndex];
-      if (!current) return;
-      
-      try {
-        const response = await safeFetch(`/api/video/${current.id}/like`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId })
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-          // Mettre à jour le nombre de likes depuis la réponse du serveur
-          current.stats.likes = result.data.likes;
-          
-          // Mettre à jour l'état du like utilisateur
-          if (result.data.liked) {
-            userLikes.add(current.id);
-            statusEl.textContent = `Like envoyé sur ${current.id}`;
-          } else {
-            userLikes.delete(current.id);
-            statusEl.textContent = `Like retiré sur ${current.id}`;
-          }
-          
-          // Mettre à jour l'affichage
-          metaEl.textContent = `Durée ${Number(current.duration || 0).toFixed(1)}s • ${current.width}x${current.height} • vues ${current.stats.views} • likes ${current.stats.likes}`;
-          
-          // Mettre à jour le bouton
-          if (result.data.liked) {
-            likeBtn.textContent = '❤️'; // Like actif
-            likeBtn.style.color = '#ff0066';
-          } else {
-            likeBtn.textContent = '🤍'; // Like inactif
-            likeBtn.style.color = '#fff';
-          }
-        } else {
-          statusEl.textContent = `Erreur: ${result.message}`;
-        }
-        
-      } catch (error) {
-        console.error('Erreur like/unlike:', error);
-        statusEl.textContent = `Erreur: ${error.message}`;
-      }
-    };
-    
-    toggleBtn.onclick = () => video.paused ? video.play() : video.pause();
-    muteBtn.onclick = () => { video.muted = !video.muted; muteBtn.textContent = video.muted ? 'Son' : 'Mute'; };
-
-    function attachVideoEvents(v) {
-      v.addEventListener('timeupdate', () => {
-        const progress = v.duration ? (v.currentTime / v.duration) * 100 : 0;
-        progressBar.style.width = `${Math.min(progress, 100)}%`;
-      });
-
-      let bufferingTimeout;
-      v.addEventListener('waiting', () => {
-        clearTimeout(bufferingTimeout);
-        bufferingTimeout = setTimeout(() => {
-          if (v.readyState < 3 && v.currentTime > 1) { 
-            bufferingEl.style.display = 'grid';
-          }
-        }, 5000); 
-      });
-      
-      v.addEventListener('playing', () => { clearTimeout(bufferingTimeout); bufferingEl.style.display = 'none'; });
-      v.addEventListener('canplay', () => { clearTimeout(bufferingTimeout); bufferingEl.style.display = 'none'; });
-      v.addEventListener('canplaythrough', () => { clearTimeout(bufferingTimeout); bufferingEl.style.display = 'none'; });
-      v.addEventListener('loadeddata', () => { clearTimeout(bufferingTimeout); bufferingEl.style.display = 'none'; });
-      v.addEventListener('loadstart', () => { bufferingEl.style.display = 'none'; });
-      v.addEventListener('seeking', () => { bufferingEl.style.display = 'none'; });
-      v.addEventListener('seeked', () => { clearTimeout(bufferingTimeout); bufferingEl.style.display = 'none'; });
-      
-      v.addEventListener('pause', () => {
-        const current = feed[currentIndex];
-        if (current) {
-          safeFetch(`/api/playback/${current.id}/events`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionId, eventType: 'pause', position: v.currentTime || 0 })
-          });
-        }
-      });
-      
-      v.addEventListener('ended', async () => {
-        const current = feed[currentIndex];
-        if (current) {
-          await safeFetch(`/api/video/${current.id}/view`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionId, watchTime: v.currentTime || 0 })
-          });
-        }
-        playVideo(currentIndex + 1);
-      });
-
-      v.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
-      v.addEventListener('touchend', (e) => e.preventDefault(), { passive: false });
+    function flashTap(icon) {
+      const span = document.getElementById("tapIcon");
+      span.textContent = icon;
+      span.style.animation = "none";
+      span.offsetHeight; // reflow
+      span.style.animation = "";
     }
 
-    attachVideoEvents(video);
-
-    // Navigation au clavier
-    window.addEventListener('keydown', (event) => {
-      if (event.code === 'ArrowUp') playVideo(currentIndex - 1);
-      if (event.code === 'ArrowDown') playVideo(currentIndex + 1);
-      if (event.code === 'Space') { 
-        event.preventDefault(); 
-        toggleBtn.click(); 
+    video.addEventListener("click", (e) => {
+      const now = Date.now();
+      if (now - lastTapTime < 300) {
+        // Double-tap → like
+        showHeart(e.clientX, e.clientY);
+        triggerLike();
+        lastTapTime = 0;
+      } else {
+        lastTapTime = now;
+        // Single tap → play/pause (with small delay to distinguish)
+        setTimeout(() => {
+          if (Date.now() - lastTapTime >= 280) {
+            if (video.paused) { video.play(); flashTap("▶"); }
+            else              { video.pause(); flashTap("⏸"); }
+          }
+        }, 300);
       }
     });
 
-    // Navigation tactile (swipe)
-    let touchStartY = 0;
-    window.addEventListener('touchstart', (event) => { 
-      touchStartY = event.changedTouches[0].screenY; 
+    // Touch-based double-tap
+    let lastTouchTime = 0;
+    video.addEventListener("touchend", (e) => {
+      const now = Date.now();
+      if (now - lastTouchTime < 300) {
+        e.preventDefault();
+        showHeart(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+        triggerLike();
+        lastTouchTime = 0;
+      } else {
+        lastTouchTime = now;
+      }
+    }, { passive: false });
+
+    // ── Like ──────────────────────────────────────────────────────────────────
+    async function triggerLike() {
+      const current = feed[currentIndex];
+      if (!current) return;
+      const res = await safeFetch(`/api/video/${current.id}/like`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId }),
+      });
+      if (!res) return;
+      const json = await res.json();
+      if (!json.success) return;
+      current.stats.likes = json.data.likes;
+      if (json.data.liked) { userLikes.add(current.id); likeBtn.textContent = "❤️"; likeBtn.style.color = "#fe2c55"; }
+      else                 { userLikes.delete(current.id); likeBtn.textContent = "🤍"; likeBtn.style.color = "#fff"; }
+      updateMetaLine(current);
+    }
+
+    likeBtn.onclick = triggerLike;
+
+    // ── Speed selector ────────────────────────────────────────────────────────
+    speedBtn.onclick = () => {
+      const idx = SPEEDS.indexOf(currentSpeed);
+      currentSpeed = SPEEDS[(idx + 1) % SPEEDS.length];
+      speedBtn.textContent = `${currentSpeed}×`;
+      video.playbackRate = currentSpeed;
+    };
+
+    // ── Mute / Play-Pause ─────────────────────────────────────────────────────
+    muteBtn.onclick   = () => { video.muted = !video.muted; muteBtn.textContent = video.muted ? "🔇" : "🔊"; };
+    toggleBtn.onclick = () => { video.paused ? video.play() : video.pause(); };
+
+    // ── Scrub progress bar ────────────────────────────────────────────────────
+    function formatTime(s) {
+      const m = Math.floor(s / 60), ss = Math.floor(s % 60);
+      return `${m}:${String(ss).padStart(2, "0")}`;
+    }
+
+    function getSpritePos(time) {
+      if (!currentSpriteUrl) return null;
+      const idx  = Math.floor(time / SPRITE_INTERVAL);
+      const col  = idx % SPRITE_COLUMNS;
+      const row  = Math.floor(idx / SPRITE_COLUMNS);
+      return { x: col * SPRITE_W, y: row * SPRITE_H };
+    }
+
+    function showSpriteAt(fraction) {
+      if (!currentSpriteUrl || !video.duration) { spritePreview.classList.remove("visible"); return; }
+      const time = fraction * video.duration;
+      const pos  = getSpritePos(time);
+      if (!pos) { spritePreview.classList.remove("visible"); return; }
+
+      spriteImg.style.backgroundImage    = `url(${currentSpriteUrl})`;
+      spriteImg.style.backgroundPosition = `-${pos.x}px -${pos.y}px`;
+      spriteImg.style.width  = `${SPRITE_W}px`;
+      spriteImg.style.height = `${SPRITE_H}px`;
+      spriteTime.textContent = formatTime(time);
+      spritePreview.style.left = `${fraction * 100}%`;
+      spritePreview.classList.add("visible");
+    }
+
+    let scrubbing = false;
+
+    function getFraction(e) {
+      const rect = progressWrap.getBoundingClientRect();
+      const x = e.clientX ?? e.touches?.[0]?.clientX ?? 0;
+      return Math.max(0, Math.min(1, (x - rect.left) / rect.width));
+    }
+
+    progressWrap.addEventListener("pointerdown", (e) => {
+      scrubbing = true;
+      progressWrap.classList.add("scrubbing");
+      progressWrap.setPointerCapture(e.pointerId);
+      const f = getFraction(e);
+      if (video.duration) video.currentTime = f * video.duration;
+      showSpriteAt(f);
+    });
+
+    progressWrap.addEventListener("pointermove", (e) => {
+      const f = getFraction(e);
+      if (scrubbing && video.duration) video.currentTime = f * video.duration;
+      showSpriteAt(f);
+    });
+
+    progressWrap.addEventListener("pointerup", () => {
+      scrubbing = false;
+      progressWrap.classList.remove("scrubbing");
+      spritePreview.classList.remove("visible");
+    });
+
+    progressWrap.addEventListener("pointerleave", () => {
+      if (!scrubbing) spritePreview.classList.remove("visible");
+    });
+
+    // ── Stats refresh ─────────────────────────────────────────────────────────
+    function updateMetaLine(item) {
+      if (item) metaEl.textContent = `${Number(item.duration || 0).toFixed(1)}s • ${item.width}×${item.height} • 👁 ${item.stats.views} • ❤ ${item.stats.likes}`;
+    }
+
+    async function updateLikes() {
+      if (!feed.length) return;
+      try {
+        const fresh = await fetchFeed(0);
+        fresh.forEach(v => {
+          const i = feed.findIndex(f => f.id === v.id);
+          if (i === -1) return;
+          feed[i].stats.likes = v.stats.likes;
+          feed[i].stats.views = v.stats.views;
+          if (i === currentIndex) updateMetaLine(feed[i]);
+        });
+      } catch {}
+    }
+
+    // ── Keyboard + swipe navigation ───────────────────────────────────────────
+    window.addEventListener("keydown", (e) => {
+      if (e.code === "ArrowUp")    { e.preventDefault(); playVideo(currentIndex - 1); }
+      if (e.code === "ArrowDown")  { e.preventDefault(); playVideo(currentIndex + 1); }
+      if (e.code === "Space")      { e.preventDefault(); toggleBtn.click(); }
+      if (e.code === "KeyM")       muteBtn.click();
+      if (e.code === "KeyL")       { if (video.duration) video.currentTime = Math.min(video.currentTime + 10, video.duration); }
+      if (e.code === "KeyJ")       { video.currentTime = Math.max(video.currentTime - 10, 0); }
+    });
+
+    let touchStartY = 0, touchStartX = 0;
+    window.addEventListener("touchstart", (e) => {
+      touchStartY = e.changedTouches[0].screenY;
+      touchStartX = e.changedTouches[0].screenX;
     }, { passive: true });
-    
-    window.addEventListener('touchend', (event) => {
-      const delta = touchStartY - event.changedTouches[0].screenY;
-      if (delta > 70) playVideo(currentIndex - 1); // Swipe up = previous
-      if (delta < -70) playVideo(currentIndex + 1); // Swipe down = next
+    window.addEventListener("touchend", (e) => {
+      const dy = touchStartY - e.changedTouches[0].screenY;
+      const dx = Math.abs(touchStartX - e.changedTouches[0].screenX);
+      if (Math.abs(dy) > 60 && dx < 40) {
+        if (dy > 0) playVideo(currentIndex + 1); // swipe up → next
+        else        playVideo(currentIndex - 1); // swipe down → prev
+      }
     }, { passive: true });
 
-    // Démarrer l'actualisation automatique des likes toutes les 5 secondes
-    setInterval(updateLikes, 5000);
+    // ── Bootstrap ─────────────────────────────────────────────────────────────
+    async function bootstrap() {
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("/sw.js").catch(() => {});
+      }
+      replayPendingEvents();
+      getNetworkProfile();
 
-    bootstrap().catch((error) => {
-      bufferingEl.style.display = 'none';
-      statusEl.textContent = error.message;
-      console.error(error);
+      bufferingEl.style.display = "grid";
+      feed = await fetchFeed(0);
+      bufferingEl.style.display = "none";
+      await playVideo(0);
+
+      setTimeout(preloadNextVideos, 200);
+      setInterval(() => { if (!isTransitioning) preloadNextVideos(); }, 3000);
+      setInterval(updateLikes, 5000);
+    }
+
+    bootstrap().catch((err) => {
+      bufferingEl.style.display = "none";
+      statusEl.textContent = err.message;
+      console.error(err);
     });
   </script>
 </body>
