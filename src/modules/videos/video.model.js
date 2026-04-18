@@ -2,9 +2,10 @@ const mongoose = require("mongoose");
 
 const videoVariantSchema = new mongoose.Schema(
   {
-    name: String,
+    name: String,       // e.g. "360p", "720p", "1080p"
     bandwidth: Number,
     resolution: String,
+    codec: { type: String, default: "avc1.640028" },
     playlistPath: String,
     preloadSegments: {
       type: [String],
@@ -44,6 +45,14 @@ const videoSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    thumbnailSpritePath: {
+      type: String,
+      default: null,
+    },
+    thumbnailVttPath: {
+      type: String,
+      default: null,
+    },
     storageKey: {
       type: String,
       default: null,
@@ -56,14 +65,15 @@ const videoSchema = new mongoose.Schema(
     duration: Number,
     width: Number,
     height: Number,
+    fps: { type: Number, default: 30 },
     aspectRatio: Number,
     targetAspectRatio: {
       type: String,
-      default: "9:16",
+      default: "16:9",
     },
     segmentDuration: {
       type: Number,
-      default: 2,
+      default: 4,
     },
     variants: {
       type: [videoVariantSchema],
@@ -91,6 +101,6 @@ const videoSchema = new mongoose.Schema(
   }
 );
 
-videoSchema.index({ createdAt: -1, 'stats.views': -1 });
+videoSchema.index({ createdAt: -1, "stats.views": -1 });
 
 module.exports = mongoose.model("Video", videoSchema);

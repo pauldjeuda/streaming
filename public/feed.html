@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Short streaming vertical</title>
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#050505" />
   <style>
     * { box-sizing: border-box; }
     html, body { margin: 0; width: 100%; height: 100%; background: #050505; color: #fff; font-family: Arial, sans-serif; overflow: hidden; }
@@ -51,7 +53,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script>
     let video = document.getElementById("video");
     const statusEl = document.getElementById("status");
@@ -68,13 +69,51 @@
     let feed = [];
     let currentIndex = 0;
     let sessionId = localStorage.getItem("demo_session_id") || `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    let userLikes = new Set(); // Garder en mémoire les vidéos likées par l'utilisateur
-    let preloadCache = new Map(); // Cache des vidéos préchargées
-    let preloadedInstances = new Map(); // Instances HLS préchargées
-    let preloadedBuffers = new Map(); // Buffers pré-remplis
-    let isTransitioning = false; // Éviter les conflits pendant transitions
+    let userLikes = new Set();
+    let preloadCache = new Map();
+    let preloadedInstances = new Map();
+    let preloadedBuffers = new Map();
+    let isTransitioning = false;
+    let isFetchingMore = false; // Guard against double fetch of next feed page
 
     localStorage.setItem("demo_session_id", sessionId);
+
+    // safeFetch — try network, queue in localStorage if offline, replay on reconnect
+    async function safeFetch(url, options = {}) {
+      try {
+        return await fetch(url, options);
+      } catch {
+        // Store event for later replay
+        const pending = JSON.parse(localStorage.getItem("pendingEvents") || "[]");
+        pending.push({ url, options, ts: Date.now() });
+        localStorage.setItem("pendingEvents", JSON.stringify(pending));
+        return null;
+      }
+    }
+
+    async function replayPendingEvents() {
+      const pending = JSON.parse(localStorage.getItem("pendingEvents") || "[]");
+      if (!pending.length) return;
+      localStorage.removeItem("pendingEvents");
+      for (const { url, options } of pending) {
+        try { await fetch(url, options); } catch { /* ignore */ }
+      }
+    }
+
+    window.addEventListener("online", replayPendingEvents);
+
+    // Auto-load next feed page when approaching the last 3 videos
+    async function loadMoreFeedIfNeeded() {
+      if (isFetchingMore) return;
+      if (currentIndex < feed.length - 3) return;
+      isFetchingMore = true;
+      try {
+        const more = await fetchFeed(feed.length);
+        if (more.length > 0) feed.push(...more);
+      } catch { /* non-fatal */ } finally {
+        isFetchingMore = false;
+      }
+    }
 
     async function fetchFeed(offset = 0) {
       const response = await fetch(`/api/v2/feed?session_id=${sessionId}&limit=20&offset=${offset}`);
@@ -356,7 +395,10 @@
       
       // Nettoyer les anciens préchargements et précharger les prochains
       cleanupOldPreloads();
-      
+
+      // Charger la page suivante du feed si on approche de la fin
+      loadMoreFeedIfNeeded();
+
       // Précharger les prochaines vidéos avec un très petit délai
       setTimeout(() => {
         isTransitioning = false;
@@ -391,6 +433,14 @@
     }
 
     async function bootstrap() {
+      // Register Service Worker for offline caching of HLS segments
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      }
+
+      // Replay any events queued while offline
+      replayPendingEvents();
+
       bufferingEl.style.display = 'grid';
       feed = await fetchFeed(0);
       bufferingEl.style.display = 'none';
@@ -414,7 +464,7 @@
       if (!current) return;
       
       try {
-        const response = await fetch(`/api/video/${current.id}/like`, {
+        const response = await safeFetch(`/api/video/${current.id}/like`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sessionId })
@@ -486,18 +536,18 @@
       v.addEventListener('pause', () => {
         const current = feed[currentIndex];
         if (current) {
-          fetch(`/api/playback/${current.id}/events`, {
+          safeFetch(`/api/playback/${current.id}/events`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ sessionId, eventType: 'pause', position: v.currentTime || 0 })
-          }).catch(() => {});
+          });
         }
       });
       
       v.addEventListener('ended', async () => {
         const current = feed[currentIndex];
         if (current) {
-          await fetch(`/api/video/${current.id}/view`, {
+          await safeFetch(`/api/video/${current.id}/view`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ sessionId, watchTime: v.currentTime || 0 })
