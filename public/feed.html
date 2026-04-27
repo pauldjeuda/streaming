@@ -135,6 +135,7 @@
     let preloadedBuffers  = new Map();
     let isTransitioning   = false;
     let isFetchingMore    = false;
+    let feedExhausted     = false;      // true once server returns 0 results
     let viewTracked       = false;      // reset per video
     let currentSpeed      = 1;
     let currentSpriteUrl  = null;       // sprite for active video
@@ -165,7 +166,14 @@
     }
 
     const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-    if (conn) conn.addEventListener("change", () => { getNetworkProfile(); });
+    if (conn) conn.addEventListener("change", () => {
+      const net = getNetworkProfile();
+      // Apply updated buffer config to the currently playing instance if it exists
+      if (hlsInstance) {
+        hlsInstance.config.maxBufferLength    = net.maxBufferLength;
+        hlsInstance.config.maxMaxBufferLength = net.maxMaxBufferLength;
+      }
+    });
 
     // ── Offline utilities ─────────────────────────────────────────────────────
     async function safeFetch(url, options = {}) {
@@ -173,6 +181,8 @@
       catch {
         const q = JSON.parse(localStorage.getItem("pendingEvents") || "[]");
         q.push({ url, options, ts: Date.now() });
+        // Cap the queue at 50 entries to avoid exceeding localStorage quota
+        if (q.length > 50) q.splice(0, q.length - 50);
         localStorage.setItem("pendingEvents", JSON.stringify(q));
         return null;
       }
@@ -198,11 +208,12 @@
     }
 
     async function loadMoreFeedIfNeeded() {
-      if (isFetchingMore || currentIndex < feed.length - 3) return;
+      if (isFetchingMore || feedExhausted || currentIndex < feed.length - 3) return;
       isFetchingMore = true;
       try {
         const more = await fetchFeed(feed.length);
         if (more.length) feed.push(...more);
+        else feedExhausted = true; // server has no more videos — stop fetching
       } catch { /* non-fatal */ } finally { isFetchingMore = false; }
     }
 
@@ -227,6 +238,8 @@
           const url = item.signedPlayback || item.hlsUrl;
           let hlsPre = null;
 
+          const abortController = new AbortController();
+
           if (window.Hls && Hls.isSupported()) {
             hlsPre = new Hls({
               maxBufferLength: net.maxBufferLength * 4,
@@ -234,14 +247,18 @@
               maxBufferSize: net.maxBufferSize * 2,
               enableWorker: true, startLevel: net.startLevel,
               capLevelToPlayerSize: true, preferManagedMediaSource: true,
+              fetchSetup: (context, initParams) => {
+                initParams.signal = abortController.signal;
+                return new Request(context.url, initParams);
+              },
             });
             hlsPre.loadSource(url);
             hlsPre.attachMedia(hidden);
             hidden.play().then(() => { hidden.pause(); hidden.currentTime = 0; }).catch(() => {});
-            preloadedInstances.set(item.id, { hls: hlsPre, video: hidden, preloadStartTime: Date.now() });
+            preloadedInstances.set(item.id, { hls: hlsPre, video: hidden, abort: abortController, preloadStartTime: Date.now() });
           } else {
             hidden.src = url; hidden.load();
-            preloadedInstances.set(item.id, { video: hidden });
+            preloadedInstances.set(item.id, { video: hidden, abort: abortController });
           }
 
           preloadedBuffers.set(item.id, { fullyLoaded: true });
@@ -257,7 +274,9 @@
       }
       for (const [id, inst] of preloadedInstances) {
         if (keep.has(id)) continue;
-        if (inst.hls) { inst.hls.stopLoad(); setTimeout(() => inst.hls.destroy(), 100); }
+        // Abort in-flight XHR/fetch requests first, then destroy synchronously
+        if (inst.abort) try { inst.abort.abort(); } catch {}
+        if (inst.hls)   try { inst.hls.destroy(); } catch {}
         if (inst.video) inst.video.remove();
         preloadedInstances.delete(id);
         preloadCache.delete(id);
@@ -269,6 +288,7 @@
     function setupLoopTracking(v, videoItem) {
       viewTracked = false;
       let wasNearEnd = false;
+      let isSeeking  = false;
 
       // Track view after playing ≥3 s (first watch)
       const viewTimer = setTimeout(() => {
@@ -281,21 +301,32 @@
         }
       }, 3000);
 
-      v._clearLoopTracking = () => clearTimeout(viewTimer);
-
-      v.addEventListener("timeupdate", function trackLoop() {
+      function trackLoop() {
         if (!v.duration) return;
         if (v.currentTime > v.duration - 0.8) wasNearEnd = true;
-        if (wasNearEnd && v.currentTime < 0.5) {
+        // Natural loop: time jumps from near-end to near-start WITHOUT a seek
+        if (wasNearEnd && v.currentTime < 0.5 && !isSeeking) {
           wasNearEnd = false;
-          // Video looped — track every loop as a re-watch event (non-blocking)
           safeFetch(`/api/playback/${videoItem.id}/events`, {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ sessionId, eventType: "loop", position: 0 }),
           });
         }
-        v._loopTracker = trackLoop;
-      });
+      }
+
+      function onSeeking()  { isSeeking = true; wasNearEnd = false; }
+      function onSeeked()   { isSeeking = false; }
+
+      v.addEventListener("timeupdate", trackLoop);
+      v.addEventListener("seeking",    onSeeking);
+      v.addEventListener("seeked",     onSeeked);
+
+      v._clearLoopTracking = () => {
+        clearTimeout(viewTimer);
+        v.removeEventListener("timeupdate", trackLoop);
+        v.removeEventListener("seeking",    onSeeking);
+        v.removeEventListener("seeked",     onSeeked);
+      };
     }
 
     // ── Main play function ────────────────────────────────────────────────────
@@ -537,8 +568,8 @@
 
     function getFraction(e) {
       const rect = progressWrap.getBoundingClientRect();
-      const x = e.clientX ?? e.touches?.[0]?.clientX ?? 0;
-      return Math.max(0, Math.min(1, (x - rect.left) / rect.width));
+      // Pointer Events always populate e.clientX — no need for a touches fallback
+      return Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     }
 
     progressWrap.addEventListener("pointerdown", (e) => {

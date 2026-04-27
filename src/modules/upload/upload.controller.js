@@ -1,11 +1,28 @@
 const { createUploadedVideo } = require("./upload.service");
 const { processVideo } = require("../../workers/transcode.worker");
-const { assertRateLimit } = require("../../services/rate-limit.service");
+
+// Simple semaphore — cap concurrent FFmpeg processes to avoid CPU saturation
+const MAX_CONCURRENT = 2;
+let activeTranscodes = 0;
+const transcodeQueue = [];
+
+function acquireSemaphore(fn) {
+  return new Promise((resolve) => {
+    const run = async () => {
+      activeTranscodes++;
+      try { resolve(await fn()); }
+      finally {
+        activeTranscodes--;
+        if (transcodeQueue.length) transcodeQueue.shift()();
+      }
+    };
+    if (activeTranscodes < MAX_CONCURRENT) run();
+    else transcodeQueue.push(run);
+  });
+}
 
 async function uploadVideo(req, res, next) {
   try {
-    // Rate limit retiré - upload illimité pour éviter le problème "pending"
-
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -13,16 +30,8 @@ async function uploadVideo(req, res, next) {
       });
     }
 
+    // MIME validation is handled by multer's fileFilter — no need to repeat it here
     const { caption, userId } = req.body;
-
-    // Validation basique du fichier vidéo
-    const allowedMimeTypes = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/x-ms-wmv'];
-    if (!allowedMimeTypes.includes(req.file.mimetype)) {
-      return res.status(400).json({
-        success: false,
-        message: "Format de fichier non supporté. Utilisez MP4, MOV, AVI ou WMV",
-      });
-    }
 
     const video = await createUploadedVideo({
       file: req.file,
@@ -30,17 +39,14 @@ async function uploadVideo(req, res, next) {
       userId,
     });
 
-    console.log(`[upload] ${video._id} "${video.caption}" — ${(req.file.size / 1024 / 1024).toFixed(1)} MB, transcoding started`);
+    console.log(`[upload] ${video._id} "${video.caption}" — ${(req.file.size / 1024 / 1024).toFixed(1)} MB, queued for transcoding (active: ${activeTranscodes}/${MAX_CONCURRENT})`);
 
-    // Start transcoding immediately — no delay
-    setImmediate(async () => {
+    // Queue transcoding — runs immediately if a slot is free, waits otherwise
+    setImmediate(() => {
       const t0 = Date.now();
-      try {
-        await processVideo(video._id);
-        console.log(`[upload] ${video._id} done in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
-      } catch (error) {
-        console.error(`[upload] ${video._id} failed: ${error.message}`);
-      }
+      acquireSemaphore(() => processVideo(video._id))
+        .then(() => console.log(`[upload] ${video._id} done in ${((Date.now() - t0) / 1000).toFixed(1)}s`))
+        .catch((error) => console.error(`[upload] ${video._id} failed: ${error.message}`));
     });
 
     return res.status(201).json({

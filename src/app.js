@@ -1,6 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
+const helmet = require("helmet");
+const compression = require("compression");
 
 const healthRoutes = require("./modules/health/health.routes");
 const uploadRoutes = require("./modules/upload/upload.routes");
@@ -13,12 +15,39 @@ const metricsRoutes = require('./modules/metrics/metrics.routes');
 const sessionsRoutes = require('./modules/sessions/sessions.routes');
 const liveRoutes = require('./modules/live/live.routes');
 const errorMiddleware = require("./middlewares/error.middleware");
+const { verifySignedToken } = require("./services/security.service");
 
 const app = express();
 
+// Security headers — disable content-type sniffing, clickjacking, etc.
+// crossOriginResourcePolicy set to cross-origin so the media player (same origin) works fine
+app.use(helmet({
+  contentSecurityPolicy: false,           // would block inline scripts in HTML pages
+  crossOriginEmbedderPolicy: false,       // HLS.js workers require cross-origin isolation to be off
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+}));
+
 app.use(cors());
+// Compress JSON/text API responses; skip binary media routes
+app.use(compression({ filter: (req, res) => !req.path.startsWith("/media") && compression.filter(req, res) }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Verify signed token on HLS master & variant playlists (.m3u8).
+// .ts segments are immutable and CDN-cacheable — they stay public.
+app.use("/media", (req, res, next) => {
+  if (req.path.endsWith(".m3u8")) {
+    const token = req.query.token;
+    if (token) {
+      const result = verifySignedToken(token);
+      if (!result.valid) {
+        return res.status(401).json({ success: false, message: "Token invalide ou expiré" });
+      }
+    }
+    // No token = allow (demo mode); in production change to: if (!token || !result.valid) return 401
+  }
+  next();
+});
 
 // HLS segments are immutable — cache them for 1 year; playlists change less often
 app.use("/media", (req, res, next) => {

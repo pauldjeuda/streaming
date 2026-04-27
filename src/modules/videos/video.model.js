@@ -101,6 +101,8 @@ const videoSchema = new mongoose.Schema(
   }
 );
 
-videoSchema.index({ createdAt: -1, "stats.views": -1 });
+videoSchema.index({ status: 1, createdAt: -1 });        // feed principal
+videoSchema.index({ userId: 1, createdAt: -1 });         // analytics créateur
+videoSchema.index({ "stats.views": -1 });                // trending
 
 module.exports = mongoose.model("Video", videoSchema);

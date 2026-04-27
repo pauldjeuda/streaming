@@ -16,12 +16,21 @@ function buildMediaUrl(relativePath) {
   return `${env.appBaseUrl}/${normalized}`;
 }
 
+function computeFreshnessScore(createdAt) {
+  const ageInHours = (Date.now() - new Date(createdAt).getTime()) / 3_600_000;
+  return 1 / (1 + ageInHours / 24);
+}
+
 function rankVideos(videos) {
-  return videos.sort((a, b) => {
-    const scoreA = (a.ranking?.viralScore || 0) + (a.ranking?.freshnessScore || 0) + (a.ranking?.recommendationScore || 0);
-    const scoreB = (b.ranking?.viralScore || 0) + (b.ranking?.freshnessScore || 0) + (b.ranking?.recommendationScore || 0);
-    return scoreB - scoreA;
-  });
+  return videos
+    .map((v) => {
+      const freshness = computeFreshnessScore(v.createdAt);
+      const viral     = (v.ranking?.viralScore || 0);
+      const rec       = (v.ranking?.recommendationScore || 0);
+      return { video: v, score: viral + freshness + rec };
+    })
+    .sort((a, b) => b.score - a.score)
+    .map(({ video }) => video);
 }
 
 async function findVideoById(videoId) {
@@ -78,7 +87,6 @@ function serializeVideo(video) {
     })),
     stats: video.stats || { views: 0, likes: 0, shares: 0, completions: 0, skips: 0 },
     ranking: video.ranking,
-    storageKey: video.storageKey,
     errorMessage: video.errorMessage,
     createdAt: video.createdAt,
     updatedAt: video.updatedAt,
