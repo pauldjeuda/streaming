@@ -2,9 +2,12 @@ const fs = require("fs");
 const path = require("path");
 const Video = require("../modules/videos/video.model");
 const env = require("../config/env");
+const log = require("../lib/logger");
 const { getVideoMetadata } = require("../lib/ffprobe");
 const { generateThumbnail, generateThumbnailSprite } = require("../lib/thumbnail");
 const { generateHlsProgressive, createMasterPlaylist, SEGMENT_DURATION } = require("../lib/hls");
+
+const MAX_DURATION_SECONDS = Number(process.env.MAX_DURATION_SECONDS || 180);
 
 function buildStoragePrefix(videoId) {
   const date = new Date().toISOString().slice(0, 10);
@@ -36,9 +39,31 @@ async function processVideo(videoId) {
     video.errorMessage = null;
     await video.save();
 
+    // ── Pre-flight checks ──────────────────────────────────────────────────────
+    const sourceStat = fs.statSync(originalAbsolutePath);
+    const diskStat   = fs.statfsSync(process.cwd());
+    const freeBytes  = diskStat.bavail * diskStat.bsize;
+    const neededBytes = sourceStat.size * 10; // HLS output ≈ 5-8× source; use 10× as safe margin
+    if (freeBytes < neededBytes) {
+      throw new Error(
+        `Espace disque insuffisant : ${Math.floor(freeBytes / 1024 / 1024)} MB libre, ` +
+        `${Math.floor(neededBytes / 1024 / 1024)} MB requis`
+      );
+    }
+
     fs.mkdirSync(mediaRootAbsolute, { recursive: true });
 
     const meta = await getVideoMetadata(originalAbsolutePath);
+
+    // ── Validate duration ──────────────────────────────────────────────────────
+    if (meta.duration > MAX_DURATION_SECONDS) {
+      throw new Error(
+        `Vidéo trop longue : ${meta.duration.toFixed(0)} s (max ${MAX_DURATION_SECONDS} s)`
+      );
+    }
+    if (!meta.width || !meta.height) {
+      throw new Error("Impossible de lire les dimensions de la vidéo");
+    }
 
     // Thumbnail generated upfront so the video has a poster immediately
     const thumbAbsolutePath = await generateThumbnail(
@@ -109,6 +134,11 @@ async function processVideo(videoId) {
     video.status = "failed";
     video.errorMessage = error.message;
     await video.save();
+
+    // Clean up any partial media files so they don't accumulate on disk
+    try { fs.rmSync(mediaRootAbsolute, { recursive: true, force: true }); } catch {}
+
+    log.error("transcode", `${videoId} failed`, { error: error.message });
     throw error;
   }
 }

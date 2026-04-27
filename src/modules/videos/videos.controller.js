@@ -93,10 +93,25 @@ async function getCatalog(req, res, next) {
   }
 }
 
+async function getVideoStats(req, res, next) {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: "ID vidéo invalide" });
+    }
+    const video = await require("./videos.service").findVideoById(id);
+    if (!video) return res.status(404).json({ success: false, message: "Vidéo introuvable" });
+    return res.json({ success: true, data: video.stats });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   getVideoById,
   getVideoStatus,
   preloadVideo,
   refreshToken,
   getCatalog,
+  getVideoStats,
 };

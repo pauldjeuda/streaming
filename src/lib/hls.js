@@ -3,6 +3,8 @@ const path = require("path");
 const { ffmpeg } = require("./ffmpeg");
 
 const SEGMENT_DURATION = 4;
+const TRANSCODE_TIMEOUT_MS = 30 * 60 * 1000; // 30 min per rendition before killing FFmpeg
+const VALID_RENDITION_NAMES = new Set(["360p", "480p", "720p", "1080p"]);
 
 // preset per rendition: 360p uses ultrafast so the video is watchable ASAP;
 // higher qualities use fast (better compression, runs in parallel so latency stays low)
@@ -31,6 +33,10 @@ function selectRenditions(meta) {
 }
 
 function generateVariant(inputPath, outputDir, rendition, fps) {
+  if (!VALID_RENDITION_NAMES.has(rendition.name)) {
+    return Promise.reject(new Error(`Nom de rendition invalide : ${rendition.name}`));
+  }
+
   return new Promise((resolve, reject) => {
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
@@ -39,7 +45,8 @@ function generateVariant(inputPath, outputDir, rendition, fps) {
     const gopSize = Math.round((fps || 30) * SEGMENT_DURATION);
     const preset  = rendition.preset || "fast";
 
-    ffmpeg(inputPath)
+    let killTimer;
+    const cmd = ffmpeg(inputPath)
       .videoFilters(
         `scale=${rendition.width}:${rendition.height}:force_original_aspect_ratio=decrease,` +
         `pad=${rendition.width}:${rendition.height}:(ow-iw)/2:(oh-ih)/2:black`
@@ -69,12 +76,23 @@ function generateVariant(inputPath, outputDir, rendition, fps) {
         `-hls_segment_filename ${segmentPath}`,
       ])
       .output(playlistPath)
+      .on("start", () => {
+        killTimer = setTimeout(() => {
+          cmd.kill("SIGKILL");
+          reject(new Error(`Transcode timeout (30 min) pour la rendition ${rendition.name}`));
+        }, TRANSCODE_TIMEOUT_MS);
+      })
       .on("end", () => {
+        clearTimeout(killTimer);
         const segments = fs.readdirSync(outputDir).filter((f) => f.endsWith(".ts")).sort();
         resolve({ playlistPath, segmentPattern: segmentPath, segments });
       })
-      .on("error", reject)
-      .run();
+      .on("error", (err) => {
+        clearTimeout(killTimer);
+        reject(err);
+      });
+
+    cmd.run();
   });
 }
 
@@ -121,7 +139,7 @@ async function generateHlsProgressive(inputPath, outputDir, meta, onFirstReady) 
 function createMasterPlaylist(videoDir, variants, fps) {
   const masterPath = path.join(videoDir, "master.m3u8");
   const frameRate  = fps ? Number(fps).toFixed(3) : "30.000";
-  const lines = ["#EXTM3U", "#EXT-X-VERSION:4", ""];
+  const lines = ["#EXTM3U", "#EXT-X-VERSION:4", "#EXT-X-INDEPENDENT-SEGMENTS", ""];
 
   for (const variant of variants) {
     const avgBandwidth = Math.round(variant.bandwidth * 0.8);

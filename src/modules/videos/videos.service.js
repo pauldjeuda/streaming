@@ -37,26 +37,31 @@ async function findVideoById(videoId) {
   return Video.findById(videoId);
 }
 
-async function getReadyFeed({ limit = env.feedPageSize, offset = 0 } = {}) {
-  const cacheKey = `feed:${limit}:${offset}`;
+async function getReadyFeed({ limit = env.feedPageSize, offset = 0, cursor = null } = {}) {
+  const cacheKey = cursor ? `feed:cursor:${cursor}:${limit}` : `feed:${limit}:${offset}`;
   const cached = cache.get(cacheKey);
+  if (cached) return cached;
 
-  if (cached) {
-    return cached;
+  const query = { status: { $in: ["ready", "processing"] } };
+  // Cursor-based: avoids skipping videos inserted between pages
+  if (cursor) {
+    try { query.createdAt = { $lt: new Date(cursor) }; } catch {}
   }
 
-  // MODIFIÉ: Montrer TOUTES les vidéos (ready + processing) pour voir toutes les vidéos uploadées
-  const videos = await Video.find({ 
-    status: { $in: ["ready", "processing"] } 
-  }).sort({ createdAt: -1 }).skip(offset).limit(limit);
-  
+  const videos = await Video.find(query)
+    .sort({ createdAt: -1 })
+    .skip(cursor ? 0 : offset) // no skip when cursor is provided
+    .limit(limit);
+
   const ranked = rankVideos(videos);
   cache.set(cacheKey, ranked, 10);
   return ranked;
 }
 
 function withSignedPlayback(video, sessionId) {
-  const token = createSignedToken({ videoId: video._id.toString(), userId: sessionId || 'guest' });
+  // TTL = video duration + 10 min buffer (minimum 10 min); avoids mid-stream expiry
+  const ttlSeconds = video.duration ? Math.max(600, Math.ceil(video.duration) + 600) : 600;
+  const token = createSignedToken({ videoId: video._id.toString(), userId: sessionId || "guest", ttlSeconds });
   const hlsUrl = buildMediaUrl(video.hlsMasterPath);
 
   return {

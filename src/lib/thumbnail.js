@@ -7,27 +7,33 @@ const SPRITE_THUMB_HEIGHT = 90;
 const SPRITE_COLUMNS = 10;
 const SPRITE_INTERVAL_SECONDS = 5;
 
-// Generate main thumbnail at ~10% of duration (avoids black opening frames)
+// Generate main thumbnail using FFmpeg's built-in thumbnail filter, which analyses the first
+// 100 frames and selects the most representative one — avoids black intros and solid-colour frames.
+// Falls back to a fixed 20%-duration seek if the filter fails (very short clips).
 function generateThumbnail(inputPath, outputDir, duration) {
+  if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+  const outputPath = path.join(outputDir, "thumb.jpg");
+
   return new Promise((resolve, reject) => {
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true });
-    }
-
-    const outputFilename = "thumb.jpg";
-    const outputPath = path.join(outputDir, outputFilename);
-    const seekTime = duration ? Math.max(1, duration * 0.1) : 1;
-
     ffmpeg(inputPath)
-      .seekInput(seekTime)
       .outputOptions([
-        "-vframes 1",
-        "-vf scale=1280:-2",
+        "-vf thumbnail,scale=1280:-2",
+        "-frames:v 1",
         "-q:v 3",
       ])
       .output(outputPath)
       .on("end", () => resolve(outputPath))
-      .on("error", reject)
+      .on("error", () => {
+        // Fallback: fixed seek at 20% of duration
+        const seekTime = duration ? Math.max(1, duration * 0.2) : 1;
+        ffmpeg(inputPath)
+          .seekInput(seekTime)
+          .outputOptions(["-vframes 1", "-vf scale=1280:-2", "-q:v 3"])
+          .output(outputPath)
+          .on("end", () => resolve(outputPath))
+          .on("error", reject)
+          .run();
+      })
       .run();
   });
 }

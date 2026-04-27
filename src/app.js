@@ -27,7 +27,19 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
 }));
 
-app.use(cors());
+// Restrict CORS to explicitly configured origins (prevents CSRF from arbitrary sites)
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",").map((s) => s.trim())
+  : ["http://localhost:4000", "http://127.0.0.1:4000"];
+
+app.use(cors({
+  origin: (origin, cb) => {
+    // Allow same-origin requests (origin is undefined for same-origin / non-browser) and whitelisted origins
+    if (!origin || allowedOrigins.includes(origin)) cb(null, true);
+    else cb(Object.assign(new Error("CORS not allowed"), { status: 403 }));
+  },
+  credentials: true,
+}));
 // Compress JSON/text API responses; skip binary media routes
 app.use(compression({ filter: (req, res) => !req.path.startsWith("/media") && compression.filter(req, res) }));
 app.use(express.json());

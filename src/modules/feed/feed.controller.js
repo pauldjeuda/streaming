@@ -8,15 +8,17 @@ async function getFeed(req, res, next) {
   const startedAt = Date.now();
 
   try {
-    const sessionId = req.query.session_id || req.headers["x-session-id"];
-    const limit = Number(req.query.limit || env.feedPageSize);
-    const offset = Number(req.query.offset || 0);
+    const sessionId = req.headers["x-session-id"] || req.query.session_id;
+    // Cap limit and offset to prevent full-collection scans
+    const limit  = Math.min(Math.max(Number(req.query.limit)  || env.feedPageSize, 1), 100);
+    const offset = Math.min(Math.max(Number(req.query.offset) || 0, 0), 10_000);
+    const cursor = req.query.cursor || null; // ISO timestamp cursor for stable pagination
     const userId = req.query.user_id || "guest";
 
     assertRateLimit({ key: `feed:${req.ip}:${userId}`, limit: 100, windowSeconds: 60 });
 
     const session = getOrCreateSession(sessionId, userId);
-    const videos = await getReadyFeed({ limit, offset });
+    const videos = await getReadyFeed({ limit, offset, cursor });
 
     const payload = videos.map((video) => withSignedPlayback(video, session.sessionId));
     touchSession(session.sessionId, {
@@ -46,6 +48,8 @@ async function getFeed(req, res, next) {
         limit,
         offset,
         nextOffset: offset + payload.length,
+        nextCursor: payload.length ? payload[payload.length - 1].createdAt : null,
+        hasMore: payload.length === limit,
       },
       session,
       preloadHints: payload.slice(1, 3).map((video) => ({ id: video.id, hlsUrl: video.hlsUrl })),
