@@ -1,5 +1,15 @@
 require("dotenv").config();
 
+const isProduction = process.env.NODE_ENV === "production";
+
+if (isProduction && !process.env.SIGNING_KEY) {
+  throw new Error("SIGNING_KEY environment variable is required in production");
+}
+
+if (!isProduction && !process.env.SIGNING_KEY) {
+  console.warn("[env] SIGNING_KEY not set — using insecure default (dev only)");
+}
+
 module.exports = {
   port: Number(process.env.PORT || 4000),
   mongoUri: process.env.MONGO_URI || "mongodb://127.0.0.1:27017/short_video_streaming",

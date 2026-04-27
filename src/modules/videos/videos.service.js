@@ -16,38 +16,52 @@ function buildMediaUrl(relativePath) {
   return `${env.appBaseUrl}/${normalized}`;
 }
 
+function computeFreshnessScore(createdAt) {
+  const ageInHours = (Date.now() - new Date(createdAt).getTime()) / 3_600_000;
+  return 1 / (1 + ageInHours / 24);
+}
+
 function rankVideos(videos) {
-  return videos.sort((a, b) => {
-    const scoreA = (a.ranking?.viralScore || 0) + (a.ranking?.freshnessScore || 0) + (a.ranking?.recommendationScore || 0);
-    const scoreB = (b.ranking?.viralScore || 0) + (b.ranking?.freshnessScore || 0) + (b.ranking?.recommendationScore || 0);
-    return scoreB - scoreA;
-  });
+  return videos
+    .map((v) => {
+      const freshness = computeFreshnessScore(v.createdAt);
+      const viral     = (v.ranking?.viralScore || 0);
+      const rec       = (v.ranking?.recommendationScore || 0);
+      return { video: v, score: viral + freshness + rec };
+    })
+    .sort((a, b) => b.score - a.score)
+    .map(({ video }) => video);
 }
 
 async function findVideoById(videoId) {
   return Video.findById(videoId);
 }
 
-async function getReadyFeed({ limit = env.feedPageSize, offset = 0 } = {}) {
-  const cacheKey = `feed:${limit}:${offset}`;
+async function getReadyFeed({ limit = env.feedPageSize, offset = 0, cursor = null } = {}) {
+  const cacheKey = cursor ? `feed:cursor:${cursor}:${limit}` : `feed:${limit}:${offset}`;
   const cached = cache.get(cacheKey);
+  if (cached) return cached;
 
-  if (cached) {
-    return cached;
+  const query = { status: { $in: ["ready", "processing"] } };
+  // Cursor-based: avoids skipping videos inserted between pages
+  if (cursor) {
+    try { query.createdAt = { $lt: new Date(cursor) }; } catch {}
   }
 
-  // MODIFIÉ: Montrer TOUTES les vidéos (ready + processing) pour voir toutes les vidéos uploadées
-  const videos = await Video.find({ 
-    status: { $in: ["ready", "processing"] } 
-  }).sort({ createdAt: -1 }).skip(offset).limit(limit);
-  
+  const videos = await Video.find(query)
+    .sort({ createdAt: -1 })
+    .skip(cursor ? 0 : offset) // no skip when cursor is provided
+    .limit(limit);
+
   const ranked = rankVideos(videos);
   cache.set(cacheKey, ranked, 10);
   return ranked;
 }
 
 function withSignedPlayback(video, sessionId) {
-  const token = createSignedToken({ videoId: video._id.toString(), userId: sessionId || 'guest' });
+  // TTL = video duration + 10 min buffer (minimum 10 min); avoids mid-stream expiry
+  const ttlSeconds = video.duration ? Math.max(600, Math.ceil(video.duration) + 600) : 600;
+  const token = createSignedToken({ videoId: video._id.toString(), userId: sessionId || "guest", ttlSeconds });
   const hlsUrl = buildMediaUrl(video.hlsMasterPath);
 
   return {
@@ -78,7 +92,6 @@ function serializeVideo(video) {
     })),
     stats: video.stats || { views: 0, likes: 0, shares: 0, completions: 0, skips: 0 },
     ranking: video.ranking,
-    storageKey: video.storageKey,
     errorMessage: video.errorMessage,
     createdAt: video.createdAt,
     updatedAt: video.updatedAt,

@@ -38,4 +38,9 @@ const playbackEventSchema = new mongoose.Schema(
   }
 );
 
+// Auto-delete events older than 30 days — prevents unbounded collection growth
+playbackEventSchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
+playbackEventSchema.index({ videoId: 1, createdAt: -1 });
+playbackEventSchema.index({ sessionId: 1 });
+
 module.exports = mongoose.model("PlaybackEvent", playbackEventSchema);
