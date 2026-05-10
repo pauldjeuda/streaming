@@ -10,4 +10,5 @@ module.exports = {
   signingKey: process.env.SIGNING_KEY || "streaming-demo-signing-key",
   feedPageSize: Number(process.env.FEED_PAGE_SIZE || 20),
   uploadMaxBytes: Number(process.env.UPLOAD_MAX_BYTES || 500 * 1024 * 1024),
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
 };

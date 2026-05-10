@@ -1,6 +1,7 @@
 const { createUploadedVideo } = require("./upload.service");
 const { processVideo } = require("../../workers/transcode.worker");
 const { assertRateLimit } = require("../../services/rate-limit.service");
+const { generateVideoCaption, moderateCaption } = require("../../services/ai.service");
 
 async function uploadVideo(req, res, next) {
   try {
@@ -13,7 +14,8 @@ async function uploadVideo(req, res, next) {
       });
     }
 
-    const { caption, userId } = req.body;
+    const { userId } = req.body;
+    let { caption } = req.body;
 
     // Validation basique du fichier vidéo
     const allowedMimeTypes = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/x-ms-wmv'];
@@ -22,6 +24,25 @@ async function uploadVideo(req, res, next) {
         success: false,
         message: "Format de fichier non supporté. Utilisez MP4, MOV, AVI ou WMV",
       });
+    }
+
+    // Moderate a user-provided caption; auto-generate one if absent
+    if (caption) {
+      const moderation = await moderateCaption(caption).catch(() => ({ safe: true, reason: null }));
+      if (!moderation.safe) {
+        return res.status(400).json({
+          success: false,
+          message: `Caption rejetée: ${moderation.reason}`,
+        });
+      }
+    } else {
+      const ai = await generateVideoCaption({
+        originalFilename: req.file.originalname,
+        duration: null,
+        width: null,
+        height: null,
+      }).catch(() => ({ caption: "", tags: [] }));
+      caption = ai.caption || "";
     }
 
     const video = await createUploadedVideo({
